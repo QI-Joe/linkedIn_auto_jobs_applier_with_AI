@@ -13,3 +13,10 @@ chrome_profile
 answers.json
 data*
 *virtual
+
+task-markdown/
+venv/
+data_folder/
+env/
+.github/
+log/
