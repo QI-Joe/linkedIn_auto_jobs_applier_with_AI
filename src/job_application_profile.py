@@ -20,6 +20,9 @@ class LegalAuthorization:
     requires_eu_visa: str
     legally_allowed_to_work_in_eu: str
     requires_eu_sponsorship: str
+    hk_work_authorization: str
+    requires_hk_visa: str
+    requires_hk_sponsorship: str
 
 @dataclass
 class WorkPreferences:

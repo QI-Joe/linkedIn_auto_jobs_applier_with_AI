@@ -192,6 +192,18 @@ class LinkedInEasyApplier:
                 self._create_and_upload_cover_letter(element)
 
     def _create_and_upload_resume(self, element, job):
+        # DISABLED: Resume generator functionality
+        if self.resume_generator_manager is None:
+            # Use static resume if available
+            if self.resume_path and os.path.exists(self.resume_path):
+                element.send_keys(os.path.abspath(self.resume_path))
+                job.pdf_path = os.path.abspath(self.resume_path) 
+                time.sleep(2)
+                return
+            else:
+                raise Exception("Resume generator is disabled and no static resume path provided")
+        
+        # Original resume generator code (kept for reference but disabled)
         folder_path = 'generated_cv'
         os.makedirs(folder_path, exist_ok=True)
         try:

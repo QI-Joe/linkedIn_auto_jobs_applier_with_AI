@@ -8,12 +8,15 @@ from selenium import webdriver
 from selenium.webdriver.chrome.service import Service as ChromeService
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.common.exceptions import WebDriverException, TimeoutException
-from lib_resume_builder_AIHawk import Resume,StyleManager,FacadeManager,ResumeGenerator
+# from lib_resume_builder_AIHawk import Resume,StyleManager,FacadeManager,ResumeGenerator  # DISABLED: Resume generator
 from src.utils import chromeBrowserOptions
 from src.gpt import GPTAnswerer
 from src.linkedIn_authenticator import LinkedInAuthenticator
 from src.linkedIn_bot_facade import LinkedInBotFacade
 from src.linkedIn_job_manager import LinkedInJobManager
+from src.jobsdb_authenticator import JobsDBAuthenticator
+from src.jobsdb_bot_facade import JobsDBBotFacade
+from src.jobsdb_job_manager import JobsDBJobManager
 from src.job_application_profile import JobApplicationProfile
 
 # Suppress stderr
@@ -158,28 +161,39 @@ def init_browser() -> webdriver.Chrome:
     except Exception as e:
         raise RuntimeError(f"Failed to initialize browser: {str(e)}")
 
-def create_and_run_bot(email: str, password: str, parameters: dict, openai_api_key: str):
+def create_and_run_bot(email: str, password: str, parameters: dict, openai_api_key: str, platform: str = "linkedin"):
     try:
-        style_manager = StyleManager()
-        resume_generator = ResumeGenerator()
+        # DISABLED: Resume generator functionality
+        # style_manager = StyleManager()
+        # resume_generator = ResumeGenerator()
         with open(parameters['uploads']['plainTextResume'], "r", encoding='utf-8') as file:
             plain_text_resume = file.read()
-        resume_object = Resume(plain_text_resume)
-        resume_generator_manager = FacadeManager(openai_api_key, style_manager, resume_generator, resume_object, Path("data_folder/output"))
-        os.system('cls' if os.name == 'nt' else 'clear')
-        resume_generator_manager.choose_style()
-        os.system('cls' if os.name == 'nt' else 'clear')
+        # resume_object = Resume(plain_text_resume)
+        # resume_generator_manager = FacadeManager(openai_api_key, style_manager, resume_generator, resume_object, Path("data_folder/output"))
+        # os.system('cls' if os.name == 'nt' else 'clear')
+        # resume_generator_manager.choose_style()
+        # os.system('cls' if os.name == 'nt' else 'clear')
         
         job_application_profile_object = JobApplicationProfile(plain_text_resume)
         
         browser = init_browser()
-        login_component = LinkedInAuthenticator(browser)
-        apply_component = LinkedInJobManager(browser)
         gpt_answerer_component = GPTAnswerer(openai_api_key)
-        bot = LinkedInBotFacade(login_component, apply_component)
+        
+        # Create platform-specific components
+        if platform.lower() == "jobsdb":
+            login_component = JobsDBAuthenticator(browser)
+            apply_component = JobsDBJobManager(browser)
+            bot = JobsDBBotFacade(login_component, apply_component)
+            print("Starting JobsDB job application bot...")
+        else:  # Default to LinkedIn
+            login_component = LinkedInAuthenticator(browser)
+            apply_component = LinkedInJobManager(browser)
+            bot = LinkedInBotFacade(login_component, apply_component)
+            print("Starting LinkedIn job application bot...")
+        
         bot.set_secrets(email, password)
-        bot.set_job_application_profile_and_resume(job_application_profile_object, resume_object)
-        bot.set_gpt_answerer_and_resume_generator(gpt_answerer_component, resume_generator_manager)
+        bot.set_job_application_profile_and_resume(job_application_profile_object, None)  # DISABLED: resume_object
+        bot.set_gpt_answerer_and_resume_generator(gpt_answerer_component, None)  # DISABLED: resume_generator_manager
         bot.set_parameters(parameters)
         bot.start_login()
         bot.start_apply()
@@ -189,9 +203,11 @@ def create_and_run_bot(email: str, password: str, parameters: dict, openai_api_k
         raise RuntimeError(f"Error running the bot: {str(e)}")
 
 
+file_path: str = r"/mnt/d/StudyWork/Job Application/Qi Shihao.pdf"
 @click.command()
-@click.option('--resume', type=click.Path(exists=True, file_okay=True, dir_okay=False, path_type=Path), help="Path to the resume PDF file")
-def main(resume: Path = None):
+@click.option('--resume', type=click.Path(exists=True, file_okay=True, dir_okay=False, path_type=Path), default=file_path, help="Path to the resume PDF file")
+@click.option('--platform', type=click.Choice(['linkedin', 'jobsdb'], case_sensitive=False), default='jobsdb', help="Platform to apply jobs on (linkedin or jobsdb)")
+def main(resume: Path = None, platform: str = 'linkedin'):
     try:
         data_folder = Path("env")
         secrets_file, config_file, plain_text_resume_file, output_folder = FileManager.validate_data_folder(data_folder)
@@ -202,7 +218,7 @@ def main(resume: Path = None):
         parameters['uploads'] = FileManager.file_paths_to_dict(resume, plain_text_resume_file)
         parameters['outputFileDirectory'] = output_folder
         
-        create_and_run_bot(email, password, parameters, openai_api_key)
+        create_and_run_bot(email, password, parameters, openai_api_key, platform)
     except ConfigError as ce:
         print(f"Configuration error: {str(ce)}")
         print("Refer to the configuration guide for troubleshooting: https://github.com/feder-cr/LinkedIn_AIHawk_automatic_job_application/blob/main/readme.md#configuration")
@@ -213,8 +229,6 @@ def main(resume: Path = None):
     except RuntimeError as re:
 
         print(f"Runtime error: {str(re)}")
-
-        print("Refer to the configuration and troubleshooting guide: https://github.com/feder-cr/LinkedIn_AIHawk_automatic_job_application/blob/main/readme.md#configuration")
     except Exception as e:
         print(f"An unexpected error occurred: {str(e)}")
         print("Refer to the general troubleshooting guide: https://github.com/feder-cr/LinkedIn_AIHawk_automatic_job_application/blob/main/readme.md#configuration")

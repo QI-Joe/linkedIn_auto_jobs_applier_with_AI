@@ -54,7 +54,7 @@ class LinkedInJobManager:
         self.resume_generator_manager = resume_generator_manager
 
     def start_applying(self):
-        self.easy_applier_component = LinkedInEasyApplier(self.driver, self.resume_path, self.set_old_answers, self.gpt_answerer, self.resume_generator_manager)
+        self.easy_applier_component = LinkedInEasyApplier(self.driver, self.resume_path, self.set_old_answers, self.gpt_answerer, self.resume_generator_manager)  # Can be None
         searches = list(product(self.positions, self.locations))
         random.shuffle(searches)
         page_sleep = 0
