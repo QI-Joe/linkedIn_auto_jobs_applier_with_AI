@@ -43,9 +43,11 @@ class LinkedInBotFacade:
     def set_gpt_answerer_and_resume_generator(self, gpt_answerer_component, resume_generator_manager):
         self._ensure_job_profile_and_resume_set()
         gpt_answerer_component.set_job_application_profile(self.job_application_profile)
-        gpt_answerer_component.set_resume(self.resume)
+        if self.resume:  # Only set resume if it exists
+            gpt_answerer_component.set_resume(self.resume)
         self.apply_component.set_gpt_answerer(gpt_answerer_component)
-        self.apply_component.set_resume_generator_manager(resume_generator_manager)
+        if resume_generator_manager:  # Only set if not None
+            self.apply_component.set_resume_generator_manager(resume_generator_manager)
         self.state.gpt_answerer_set = True
 
     def set_parameters(self, parameters):
