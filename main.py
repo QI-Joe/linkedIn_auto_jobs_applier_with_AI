@@ -8,7 +8,7 @@ from selenium import webdriver
 from selenium.webdriver.chrome.service import Service as ChromeService
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.common.exceptions import WebDriverException, TimeoutException
-# from lib_resume_builder_AIHawk import Resume,StyleManager,FacadeManager,ResumeGenerator  # DISABLED: Resume generator
+from lib_resume_builder_AIHawk import Resume, StyleManager, FacadeManager, ResumeGenerator  # DISABLED: Resume generator
 from src.utils import chromeBrowserOptions
 from src.gpt import GPTAnswerer
 from src.linkedIn_authenticator import LinkedInAuthenticator
@@ -163,16 +163,15 @@ def init_browser() -> webdriver.Chrome:
 
 def create_and_run_bot(email: str, password: str, parameters: dict, openai_api_key: str, platform: str = "linkedin"):
     try:
-        # DISABLED: Resume generator functionality
-        # style_manager = StyleManager()
-        # resume_generator = ResumeGenerator()
+        style_manager = StyleManager()
+        resume_generator = ResumeGenerator()
         with open(parameters['uploads']['plainTextResume'], "r", encoding='utf-8') as file:
             plain_text_resume = file.read()
-        # resume_object = Resume(plain_text_resume)
-        # resume_generator_manager = FacadeManager(openai_api_key, style_manager, resume_generator, resume_object, Path("data_folder/output"))
-        # os.system('cls' if os.name == 'nt' else 'clear')
-        # resume_generator_manager.choose_style()
-        # os.system('cls' if os.name == 'nt' else 'clear')
+        resume_object = Resume(plain_text_resume)
+        resume_generator_manager = FacadeManager(openai_api_key, style_manager, resume_generator, resume_object, Path("data_folder/output"))
+        os.system('cls' if os.name == 'nt' else 'clear')
+        resume_generator_manager.choose_style()
+        os.system('cls' if os.name == 'nt' else 'clear')
         
         job_application_profile_object = JobApplicationProfile(plain_text_resume)
         
@@ -192,8 +191,8 @@ def create_and_run_bot(email: str, password: str, parameters: dict, openai_api_k
             print("Starting LinkedIn job application bot...")
         
         bot.set_secrets(email, password)
-        bot.set_job_application_profile_and_resume(job_application_profile_object, None)  # DISABLED: resume_object
-        bot.set_gpt_answerer_and_resume_generator(gpt_answerer_component, None)  # DISABLED: resume_generator_manager
+        bot.set_job_application_profile_and_resume(job_application_profile_object, resume_object)
+        bot.set_gpt_answerer_and_resume_generator(gpt_answerer_component, resume_generator_manager)
         bot.set_parameters(parameters)
         bot.start_login()
         bot.start_apply()

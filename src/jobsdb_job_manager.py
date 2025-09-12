@@ -1,9 +1,12 @@
 import random
 import time
+from typing import Dict, Any, List, Optional
 from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.remote.webdriver import WebDriver
+from selenium.webdriver.remote.webelement import WebElement
 import src.utils as utils
 from src.base_job_manager import BaseJobManager
 from src.job import Job
@@ -16,17 +19,17 @@ class JobsDBJobManager(BaseJobManager):
     Handles job search, discovery, and application coordination for JobsDB platform.
     """
     
-    def __init__(self, driver):
+    def __init__(self, driver: WebDriver) -> None:
         super().__init__(driver)
-        self.base_url = "https://hk.jobsdb.com"
-        self.search_path = "/hk/search-jobs"
-        self.last_search_url = ""
+        self.base_url: str = "https://hk.jobsdb.com"
+        self.search_path: str = "/hk/search-jobs"
+        self.last_search_url: str = ""
         
     def get_platform_name(self) -> str:
         """Return the platform name"""
         return "jobsdb"
     
-    def get_base_search_url(self, parameters) -> str:
+    def get_base_search_url(self, parameters: Dict[str, Any]) -> str:
         """Build base search URL for JobsDB"""
         # JobsDB search URL pattern: /hk/search-jobs?q=keywords&l=location&start=0
         base_params = {
@@ -47,7 +50,7 @@ class JobsDBJobManager(BaseJobManager):
         # JobsDB uses location parameter 'l'
         return f"&l={location.replace(' ', '%20')}"
     
-    def next_job_page(self, position: str, location: str, job_page: int):
+    def next_job_page(self, position: str, location: str, job_page: int) -> None:
         """Navigate to next page of JobsDB job results"""
         # JobsDB pagination uses 'start' parameter (jobs per page * page number)
         start_index = job_page * 20  # JobsDB typically shows 20 jobs per page
@@ -75,7 +78,7 @@ class JobsDBJobManager(BaseJobManager):
         except Exception:
             utils.printred("JobsDB: Job results took too long to load")
     
-    def get_job_list_elements(self):
+    def get_job_list_elements(self) -> List[WebElement]:
         """Get job listing elements from current JobsDB page"""
         # JobsDB job listing selectors (these will need collaboration to identify)
         job_selectors = [
@@ -86,7 +89,7 @@ class JobsDBJobManager(BaseJobManager):
             '[class*="job-item"]'                # Class contains job-item
         ]
         
-        job_elements = []
+        job_elements: List[WebElement] = []
         for selector in job_selectors:
             try:
                 elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
