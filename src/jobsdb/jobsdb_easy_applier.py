@@ -9,7 +9,7 @@ from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 import src.utils as utils
-from src.base_easy_applier import BaseEasyApplier
+from src.base.base_easy_applier import BaseEasyApplier
 
 
 class JobsDBEasyApplier(BaseEasyApplier):

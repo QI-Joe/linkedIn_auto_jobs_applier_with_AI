@@ -7,8 +7,8 @@ from pathlib import Path
 from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.common.by import By
 import src.utils as utils
-from src.job import Job
-from src.linkedIn_easy_applier import LinkedInEasyApplier
+from src.utils.job import Job
+from linkedIn_easy_applier import LinkedInEasyApplier
 import json
 
 

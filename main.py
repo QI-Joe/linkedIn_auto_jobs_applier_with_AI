@@ -8,16 +8,16 @@ from selenium import webdriver
 from selenium.webdriver.chrome.service import Service as ChromeService
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.common.exceptions import WebDriverException, TimeoutException
-from lib_resume_builder_AIHawk import Resume, StyleManager, FacadeManager, ResumeGenerator  # DISABLED: Resume generator
-from src.utils import chromeBrowserOptions
-from src.gpt import GPTAnswerer
-from src.linkedIn_authenticator import LinkedInAuthenticator
-from src.linkedIn_bot_facade import LinkedInBotFacade
-from src.linkedIn_job_manager import LinkedInJobManager
-from src.jobsdb_authenticator import JobsDBAuthenticator
-from src.jobsdb_bot_facade import JobsDBBotFacade
-from src.jobsdb_job_manager import JobsDBJobManager
-from src.job_application_profile import JobApplicationProfile
+from lib_resume_builder_AIHawk import Resume, StyleManager, FacadeManager, ResumeGenerator 
+from src.utils.utils import chromeBrowserOptions
+from utils.gpt import GPTAnswerer
+from src.linkedin.linkedIn_authenticator import LinkedInAuthenticator
+from src.linkedin.linkedIn_bot_facade import LinkedInBotFacade
+from src.linkedin.linkedIn_job_manager import LinkedInJobManager
+from src.jobsdb.jobsdb_authenticator import JobsDBAuthenticator
+from src.jobsdb.jobsdb_bot_facade import JobsDBBotFacade
+from src.jobsdb.jobsdb_job_manager import JobsDBJobManager
+from src.utils.job_application_profile import JobApplicationProfile
 
 # Suppress stderr
 sys.stderr = open(os.devnull, 'w')

@@ -1,9 +1,9 @@
 from typing import Optional, Dict, Any, List
-from src.jobsdb_authenticator import JobsDBAuthenticator
-from src.jobsdb_job_manager import JobsDBJobManager
-from src.job_application_profile import JobApplicationProfile
-from src.gpt import GPTAnswerer
-
+from jobsdb_authenticator import JobsDBAuthenticator
+from jobsdb_job_manager import JobsDBJobManager
+from src.utils.job_application_profile import JobApplicationProfile
+from utils.gpt import GPTAnswerer
+from typing import Optional, Dict, Any
 
 class JobsDBBotState:
     def __init__(self) -> None:
@@ -21,13 +21,6 @@ class JobsDBBotState:
         for key in required_keys:
             if not getattr(self, key):
                 raise ValueError(f"{key.replace('_', ' ').capitalize()} must be set before proceeding.")
-
-
-from typing import Optional, Dict, Any
-from src.jobsdb_authenticator import JobsDBAuthenticator
-from src.jobsdb_job_manager import JobsDBJobManager
-from src.job_application_profile import JobApplicationProfile
-from src.gpt import GPTAnswerer
 
 
 class JobsDBBotFacade:
