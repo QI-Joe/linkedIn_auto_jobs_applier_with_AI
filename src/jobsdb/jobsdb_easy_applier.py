@@ -8,7 +8,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
-import src.utils as utils
+import src.utils.utils as utils
 from src.base.base_easy_applier import BaseEasyApplier
 
 
@@ -21,7 +21,12 @@ class JobsDBEasyApplier(BaseEasyApplier):
     def __init__(self, driver: Any, resume_dir: Optional[str], set_old_answers: List, gpt_answerer: Any, resume_generator_manager):
         super().__init__(driver, resume_dir, set_old_answers, gpt_answerer, resume_generator_manager)
         self.base_url = "https://hk.jobsdb.com"
-        
+    
+    def get_job_search_url(self):
+        self.job_title, self.job_posting_date_range = "ai-engineer-jobs", 14
+        target_url=f"{self.base_url}/{self.job_title}?daterange={self.job_posting_date_range}"
+        return target_url
+    
     def get_platform_selectors(self):
         """Return JobsDB-specific CSS selectors"""
         return {
@@ -45,67 +50,319 @@ class JobsDBEasyApplier(BaseEasyApplier):
             ]
         }
 
-    def job_apply(self, job: Any):
-        """Main job application method for JobsDB"""
-        try:
-            # Navigate to job page
-            self.driver.get(job.link)
-            time.sleep(random.uniform(3, 5))
+    def iterate_and_apply_jobs(self):
+        """Main method: iterate through all job cards on current page and apply"""
+        seen_job_ids = set()
+        max_iterations = 50
+        
+        utils.printyellow("JobsDB: Starting job card iteration...")
+        
+        job_list_url = self.get_job_search_url()
+        self.driver.get(job_list_url)
+        
+        for iteration in range(max_iterations):
+            job_cards = self._get_all_job_cards()
+            current_count = len(job_cards)
             
-            # Get job description and set GPT context
-            job.set_job_description(self._get_job_description())
-            self.gpt_answerer.set_job(job)
+            utils.printyellow(f"JobsDB: Iteration {iteration+1}, found {current_count} job cards")
             
-            # Find and click apply button
-            apply_button = self._find_apply_button()
-            self._click_with_retry(apply_button)
+            new_jobs_processed = 0
+            for card_index in range(len(job_cards)):
+                try:
+                    # Re-fetch cards to avoid stale elements
+                    job_cards = self._get_all_job_cards()
+                    if card_index >= len(job_cards):
+                        break
+                        
+                    card = job_cards[card_index]
+                    job_id = self._extract_job_id_from_card(card)
+                    
+                    if job_id in seen_job_ids:
+                        continue
+                    
+                    success = self._process_single_job_card(card, job_id)
+                    seen_job_ids.add(job_id)
+                    
+                    if success:
+                        new_jobs_processed += 1
+                        
+                    time.sleep(random.uniform(1, 2))
+                    
+                except Exception as e:
+                    utils.printred(f"JobsDB: Error processing card {card_index}: {str(e)}")
+                    continue
             
-            # Wait for page transition if needed
-            time.sleep(random.uniform(2, 4))
-            
-            # Fill application form(s) - reuse base class logic
-            self._fill_application_forms(job)
-            
-            # Return to job list
-            self._return_to_job_list()
-            
-        except Exception as e:
-            tb_str = traceback.format_exc()
-            self._discard_application()
-            raise Exception(f"Failed to apply to JobsDB job: {str(e)}\\nTraceback:\\n{tb_str}")
+            utils.printyellow(f"JobsDB: Processed {new_jobs_processed} new jobs this round")
+                
+            # If no new jobs found, stop
+            if new_jobs_processed == 0:
+                utils.printyellow("JobsDB: No new jobs found, iteration complete")
+                break
+        
+        utils.printyellow(f"JobsDB: Iteration complete, processed {len(seen_job_ids)} total jobs")
 
-    def _find_apply_button(self) -> WebElement:
-        """Find JobsDB apply button"""
-        selectors = self.get_platform_selectors()['apply_button']
+    def job_apply(self, job: Any):
+        """Deprecated - use iterate_and_apply_jobs instead"""
+        utils.printred("JobsDB: job_apply method is deprecated, use iterate_and_apply_jobs instead")
+        raise Exception("Use iterate_and_apply_jobs method for JobsDB")
+
+    def _find_apply_button(self):
+        """depreciated - used to fullfill abstract method implementation"""
+        utils.printred("JobsDB: _find_apply_button function is depreciated")
+        raise Exception("Use _get_all_job_cards method instead")
+
+    def _get_all_job_cards(self) -> List[WebElement]:
+        """Get all job cards on current page"""
+        selectors = [
+            'article[data-testid="job-card"]',
+            'article[data-card-type="JobCard"]',
+            '.job-card'
+        ]
         
-        # Scroll to ensure button is visible
-        self._scroll_page()
-        
-        # Try each selector
         for selector in selectors:
             try:
-                button = WebDriverWait(self.driver, 5).until(
-                    EC.element_to_be_clickable((By.CSS_SELECTOR, selector))
-                )
-                if button.is_displayed() and button.is_enabled():
-                    utils.printyellow(f"JobsDB: Found apply button with selector: {selector}")
-                    return button
-            except (TimeoutException, NoSuchElementException):
+                cards = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                if cards:
+                    utils.printyellow(f"JobsDB: Found {len(cards)} cards with selector: {selector}")
+                    return cards
+            except Exception:
                 continue
         
-        # Fallback: Look for any button with apply-related text
-        apply_texts = ["apply now", "quick apply", "apply"]
-        for text in apply_texts:
+        return []
+
+    def _extract_job_id_from_card(self, card: WebElement) -> str:
+        """Extract job ID from card"""
+        try:
+            # Try data attribute first
+            job_id = card.get_attribute("data-job-id")
+            if job_id:
+                return job_id
+                
+            # Try href extraction
+            link_selectors = [
+                'a[data-automation="job-list-item-link-overlay"]',
+                'a[data-automation="jobTitle"]',
+                'a[href*="/job/"]'
+            ]
+            
+            for selector in link_selectors:
+                try:
+                    link = card.find_element(By.CSS_SELECTOR, selector)
+                    href = link.get_attribute("href")
+                    if href and "/job/" in href:
+                        import re
+                        match = re.search(r'/job/(\d+)', href)
+                        if match:
+                            return match.group(1)
+                except Exception:
+                    continue
+                    
+            # Use card hash as fallback ID
+            return f"card_{hash(card.get_attribute('outerHTML'))}"
+            
+        except Exception:
+            return f"unknown_{time.time()}"
+
+    def _process_single_job_card(self, card: WebElement, job_id: str) -> bool:
+        """Process single job card"""
+        try:
+            utils.printyellow(f"JobsDB: Processing job card {job_id}")
+            
+            # Scroll to card
+            self.driver.execute_script("arguments[0].scrollIntoView({block:'center'});", card)
+            time.sleep(random.uniform(1, 2))
+            
+            # Click card to open sidebar
+            jumped, job_list_search_archive_windows = self._click_card_to_open_sidebar(card)
+            new_windows = None
+            # Wait for sidebar
+            sidebar = self._wait_for_sidebar(jumped)
+            
+            # Extract job info
+            job_info = self._extract_job_info_from_sidebar(sidebar, job_id)
+            
+            # Find apply button
+            apply_button = self._find_apply_button_in_sidebar(sidebar)
+            
+            button_text = apply_button.text.strip()
+            utils.printyellow(f"JobsDB: Found apply button: {button_text}")
+            
+            if jumped:
+                """
+                job_list_search_archive_windows: main windows should always be remained, show overall qualifed jobs
+                new_windows: the current windows after jumped
+                """
+                new_windows, job_list_search_archive_windows = job_list_search_archive_windows, self.get_job_search_url()
+            
+            if self._should_apply_by_button_text(button_text):
+                return self._handle_job_application(apply_button, job_info, [new_windows], job_list_search_archive_windows)
+            else:
+                utils.printyellow(f"JobsDB: Skipping - button type: {button_text}")
+                
+            return False
+            
+        except Exception as e:
+            utils.printred(f"JobsDB: Error processing card {job_id}: {str(e)}")
+            return False
+
+    def _click_card_to_open_sidebar(self, card: WebElement):
+        """Click card to open sidebar"""
+        link_selectors = [
+            'a[data-automation="job-list-item-link-overlay"]',
+            'a[data-automation="jobTitle"]'
+        ]
+        
+        for selector in link_selectors:
             try:
-                button = self.driver.find_element(By.XPATH, 
-                    f'//button[contains(translate(text(), "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"), "{text}")]')
-                if button.is_displayed() and button.is_enabled():
-                    utils.printyellow(f"JobsDB: Found apply button with text: {text}")
-                    return button
-            except NoSuchElementException:
+                link = card.find_element(By.CSS_SELECTOR, selector)
+                self._click_with_retry(link)
+                
+                current_windows_url = self.driver.current_url
+                if self.job_title not in str(current_windows_url).split('/'):
+                    return True, current_windows_url
+                return False, current_windows_url
+            except Exception:
+                # should add in log...
                 continue
         
-        raise Exception("No clickable JobsDB apply button found")
+
+    def _wait_for_sidebar(self, jumped: bool) -> WebElement:
+        """Wait for sidebar to appear"""
+        selectors = [
+            'div[data-automation="splitViewJobDetailsWrapper"]',
+        ]
+        if jumped:
+            selectors=[
+                'div[data-automation="jobDetailsPage"]',
+            ]
+        
+        for selector in selectors:
+            try:
+                sidebar = WebDriverWait(self.driver, 10).until(
+                    EC.visibility_of_element_located((By.CSS_SELECTOR, selector))
+                )
+                utils.printyellow(f"JobsDB: Sidebar loaded with selector: {selector}")
+                return sidebar
+            except Exception:
+                continue
+        
+        raise Exception("Sidebar load timeout")
+
+    def _find_apply_button_in_sidebar(self, sidebar: WebElement) -> Optional[WebElement]:
+        """Find apply button in sidebar"""
+        selectors = [
+            'a[data-automation="job-detail-apply"]',
+            'button[data-automation="job-detail-apply"]',
+            '.apply-button',
+            'a[href*="/apply"]'
+        ]
+        
+        for selector in selectors:
+            try:
+                button = sidebar.find_element(By.CSS_SELECTOR, selector)
+                if button.is_displayed() and button.is_enabled():
+                    return button
+            except Exception:
+                continue
+        
+        return None
+
+    def _extract_job_info_from_sidebar(self, sidebar: WebElement, job_id: str) -> dict:
+        """Extract job info from sidebar"""
+        info = {
+            'job_id': job_id,
+            'title': 'Unknown',
+            'company': 'Unknown',
+            'link': self.driver.current_url
+        }
+        
+        # Extract title
+        title_selectors = ['h1[data-automation="jobTitle"]', '.job-title', 'h1', 'h2']
+        for selector in title_selectors:
+            try:
+                title_element = sidebar.find_element(By.CSS_SELECTOR, selector)
+                info['title'] = title_element.text.strip()
+                break
+            except Exception:
+                continue
+        
+        # Extract company
+        company_selectors = ['[data-automation="jobCompany"]', '.company-name', 'a[href*="/companies/"]']
+        for selector in company_selectors:
+            try:
+                company_element = sidebar.find_element(By.CSS_SELECTOR, selector)
+                info['company'] = company_element.text.strip()
+                break
+            except Exception:
+                continue
+        
+        return info
+
+    def _should_apply_by_button_text(self, button_text: str) -> bool:
+        """Decide whether to apply based on button text"""
+        button_text = button_text.lower().strip()
+        apply_keywords = ['quick apply', 'easy apply']
+        
+        return any(keyword in button_text for keyword in apply_keywords)
+
+    def _handle_job_application(self, apply_button: WebElement, job_info: dict, new_windows: list[str], job_list_windows: str) -> bool:
+        """Handle job application"""
+        try:
+            main_window = job_list_windows
+            existing_windows = set(self.driver.window_handles)
+            
+            # Click apply button
+            self._click_with_retry(apply_button)
+            time.sleep(random.uniform(2, 4))
+            
+            # Check for new tab
+            if new_windows is None:
+                new_windows = set(self.driver.window_handles) - existing_windows
+            
+            # Switch to new tab
+            new_window = list(new_windows)[0]
+            self.driver.switch_to.window(new_window)
+            
+            try:
+                # Create fake job object for form filling
+                fake_job = self._create_job_object_from_info(job_info)
+                fake_job.set_job_description(job_info.get('title', 'Unknown'))
+                self.gpt_answerer.set_job(fake_job)
+                
+                # Fill application forms
+                self._fill_application_forms(fake_job)
+                
+                utils.printyellow(f"JobsDB: Applied to {job_info['title']} at {job_info['company']}")
+                return True
+                
+            except Exception as e:
+                utils.printred(f"JobsDB: Form filling failed: {str(e)}")
+                return False
+            finally:
+                # Close new tab and return to main
+                try:
+                    self.driver.close()
+                except Exception:
+                    pass
+                self.driver.switch_to.window(main_window)
+                
+        except Exception as e:
+            utils.printred(f"JobsDB: Application failed: {str(e)}")
+            return False
+
+    def _create_job_object_from_info(self, job_info: dict):
+        """Create job object from info"""
+        from src.utils.job import Job
+        
+        return Job(
+            title=job_info.get('title', 'Unknown'),
+            company=job_info.get('company', 'Unknown'),
+            location='Unknown',
+            apply_method='Quick Apply',
+            link=job_info.get('link', ''),
+            platform='jobsdb'
+        )
+
 
     def _get_job_description(self) -> str:
         """Extract job description from JobsDB job page"""

@@ -13,7 +13,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 from Levenshtein import distance
 
-import src.strings as strings
+import src.utils.strings as strings
 
 load_dotenv()
 

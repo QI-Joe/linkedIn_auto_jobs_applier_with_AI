@@ -1,9 +1,9 @@
 from typing import Optional, Dict, Any, List
-from jobsdb_authenticator import JobsDBAuthenticator
-from jobsdb_job_manager import JobsDBJobManager
+from src.jobsdb.jobsdb_authenticator import JobsDBAuthenticator
+from src.jobsdb.jobsdb_job_manager import JobsDBJobManager
 from src.utils.job_application_profile import JobApplicationProfile
-from utils.gpt import GPTAnswerer
-from typing import Optional, Dict, Any
+from src.utils.gpt import GPTAnswerer
+
 
 class JobsDBBotState:
     def __init__(self) -> None:
@@ -77,7 +77,7 @@ class JobsDBBotFacade:
 
     def start_apply(self) -> None:
         self.state.validate_state(['logged_in', 'job_application_profile_set', 'gpt_answerer_set', 'parameters_set'])
-        self.apply_component.start_applying()
+        self.apply_component.apply_jobs()
 
     def _validate_non_empty(self, value: Any, name: str) -> None:
         if not value:

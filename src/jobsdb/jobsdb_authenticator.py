@@ -7,6 +7,8 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.remote.webdriver import WebDriver
 from src.base.base_authenticator import BaseAuthenticator
+from selenium.common.exceptions import TimeoutException, ElementClickInterceptedException, ElementNotInteractableException
+
 
 
 class JobsDBAuthenticator(BaseAuthenticator):
@@ -50,35 +52,43 @@ class JobsDBAuthenticator(BaseAuthenticator):
         }
 
     def is_logged_in(self) -> bool:
-        """Check if user is currently logged in to JobsDB"""
+        """
+        Check if user is currently logged in to JobsDB
+        Strategy 1: Direct page access verification (similar to LinkedIn approach)
+        """
         try:
-            # Check if we're on a member/profile page
-            current_url = self.driver.current_url
-            if any(indicator in current_url for indicator in ["/member/", "/profile/", "/dashboard/"]):
+            print("🔍 检测 JobsDB 登录状态...")
+            
+            # Save current URL to restore later if needed
+            original_url = self.driver.current_url
+            print(f"📍 当前页面: {original_url}")
+            
+            # Try to access the user profile page (protected page)
+            profile_url = 'https://hk.jobsdb.com/profile/me'
+            print(f"🔗 尝试访问个人资料页面: {profile_url}")
+            
+            self.driver.get(profile_url)
+            time.sleep(3)  # Wait for page load and any redirects
+            
+            final_url = self.driver.current_url
+            print(f"📍 最终页面: {final_url}")
+            
+            # If redirected to login page, user is not logged in
+            if '/oauth/login' in final_url or '/login' in final_url:
+                print("❌ 检测结果: 未登录 (重定向到登录页面)")
+                return False
+            
+            # If we're on a profile page, user is logged in
+            if '/profile' in final_url:
+                print("✅ 检测结果: 已登录 (成功访问个人资料页面)")
                 return True
             
-            # Check for profile menu or member indicators
-            profile_indicators = [
-                '[data-automation="member-menu"]',
-                '.profile-menu',
-                'a[href*="/member/"]',
-                'a[href*="/profile/"]',
-                '[class*="profile"]',
-                '[class*="member"]'
-            ]
-            
-            for indicator in profile_indicators:
-                try:
-                    element = self.driver.find_element(By.CSS_SELECTOR, indicator)
-                    if element.is_displayed():
-                        return True
-                except NoSuchElementException:
-                    continue
-                    
+            # Unknown state
+            print(f"⚠️ 检测结果: 未知状态 (页面: {final_url})")
             return False
             
         except Exception as e:
-            print(f"Error checking login status: {e}")
+            print(f"❌ 登录检测异常: {str(e)}")
             return False
 
     def handle_login(self) -> None:
@@ -101,10 +111,14 @@ class JobsDBAuthenticator(BaseAuthenticator):
             # Step 2: Request verification code
             self.request_verification_code()
             
-            # Step 3: Handle verification process (manual user input with URL monitoring)
-            self.handle_security_check()
+            # Step 3: Wait for manual verification code input (similar to LinkedIn security check)
+            # Add a delay to allow page transition after sending verification code
+            time.sleep(5)  # Wait for page to load verification code input form
             
-            # Step 4: Verify login success
+            # Step 4: Handle verification process (manual user input with 5-minute timeout)
+            self.handle_verification_wait()
+            
+            # Step 5: Verify login success
             self.verify_login_success()
             
         except Exception as e:
@@ -195,7 +209,58 @@ class JobsDBAuthenticator(BaseAuthenticator):
             print(f"Error requesting verification code: {e}")
             raise
 
-
+    def handle_verification_wait(self) -> None:
+        """
+        Handle verification code input wait - similar to LinkedIn's security check.
+        Waits up to 5 minutes for user to manually enter verification code.
+        """
+        try:
+            print("\n" + "="*70)
+            print("📧 EMAIL VERIFICATION REQUIRED")
+            print("="*70)
+            print(f"A verification code has been sent to: {self.email}")
+            print("Please check your email and enter the verification code in the browser.")
+            print("The system will wait for up to 5 minutes for completion.")
+            print("="*70)
+            
+            # Store current URL to detect changes
+            current_url = self.driver.current_url
+            
+            # Wait for verification to complete (5 minutes timeout like LinkedIn)
+            print("⏳ Waiting for verification code input...")
+            print("(Timeout: 5 minutes)")
+            
+            # Monitor for URL changes or login indicators
+            WebDriverWait(self.driver, 300).until(  # 300 seconds = 5 minutes
+                lambda driver: (
+                    # Check if URL changed (indicating successful verification)
+                    driver.current_url != current_url or
+                    # Check if we're on logged-in pages
+                    any(indicator in driver.current_url.lower() 
+                        for indicator in ["profile", "member", "dashboard", "feed"]) or
+                    # Check for logged-in indicators on page
+                    self.is_logged_in()
+                )
+            )
+            
+            print("✅ Verification completed successfully!")
+            
+        except TimeoutException:
+            print("\n⏱️ Verification timeout (5 minutes elapsed).")
+            print("Please complete the verification manually or try again.")
+            print(f"Current URL: {self.driver.current_url}")
+            
+            # Give user another chance to complete manually
+            print("\n🔄 You can still complete the verification manually.")
+            print("The system will wait for your confirmation...")
+            input("Press Enter after completing the verification manually...")
+            
+            # Check if login was successful after manual completion
+            if self.is_logged_in():
+                print("✅ Manual verification completed successfully!")
+            else:
+                print("❌ Login still not detected. Please check the browser.")
+                raise Exception("Verification failed - login not completed")
 
     def verify_login_success(self) -> None:
         """Verify that login was successful"""
@@ -212,136 +277,6 @@ class JobsDBAuthenticator(BaseAuthenticator):
             print("❌ Login verification timed out")
             print(f"Current URL: {self.driver.current_url}")
             raise Exception("Failed to verify successful login")
-
-    def login_and_go(self, current_url: str):
-        try:
-            print("\n" + "="*60)
-            print("VERIFICATION CODE REQUIRED")
-            print("="*60)
-            print(f"A verification code has been sent to: {self.email}")
-            print("Please check your email and enter the verification code directly in the browser.")
-            print("The system will monitor for successful login completion.")
-            print("="*60)
-            
-            # Wait for user to complete verification and login
-            print("Waiting for you to complete the verification process...")
-            print("(Timeout: 5 minutes)")
-            
-            WebDriverWait(self.driver, 300).until(
-                lambda driver: (
-                    driver.current_url != current_url and
-                    any(indicator in driver.current_url.lower() 
-                        for indicator in ["profile", "member", "dashboard", "feed"]) or
-                    self.is_logged_in()
-                )
-            )
-            
-            print("✅ Verification completed successfully!")
-            
-        except TimeoutException:
-            print("⏱️ Verification timeout. Please try again or complete manually.")
-            print(f"Current URL: {self.driver.current_url}")
-            
-            # Give user another chance to complete manually
-            print("\nYou can still complete the verification manually.")
-            input("Press Enter after completing the verification manually...")
-            
-
-    def handle_security_check(self) -> None:
-        """Handle JobsDB-specific security challenges"""
-        try:
-            current_url = self.driver.current_url
-            page_source = self.driver.page_source.lower()
-            
-            # Check for common security challenges
-            security_indicators = [
-                "captcha",
-                "verification", 
-                "challenge",
-                "security-check",
-                "verify",
-                "suspicious"
-            ]
-            
-            for indicator in security_indicators:
-                if indicator in current_url.lower() or indicator in page_source:
-                    print(f"🔒 Security challenge detected: {indicator}")
-                    print("Please complete the security check manually in the browser...")
-                    
-                    # Wait for user to complete security check
-                    input("Press Enter after completing the security check...")
-                    break
-            
-            # Additional wait for any post-login processing
-            time.sleep(random.uniform(2, 4))
-            
-            # Check for common security elements
-            security_indicators = [
-                '//div[contains(@class, "captcha")]',
-                '//div[contains(@class, "security")]',
-                '//div[contains(@class, "verification")]',
-                '//input[@type="text" and contains(@placeholder, "verification")]'
-            ]
-            
-            for indicator in security_indicators:
-                try:
-                    element = self.driver.find_element(By.XPATH, indicator)
-                    if element.is_displayed():
-                        print("Security challenge detected on JobsDB. Please complete manually.")
-                        # Wait for user to complete the challenge
-                        WebDriverWait(self.driver, 300).until(
-                            lambda driver: driver.current_url != current_url or 
-                                          "profile" in driver.current_url.lower() or
-                                          "member" in driver.current_url.lower()
-                        )
-                        print("Security challenge completed.")
-                        return
-                except NoSuchElementException:
-                    continue
-                    
-        except TimeoutException:
-            print("Security check timeout. Proceeding with login attempt.")
-
-    def is_logged_in(self):
-        """Check if user is logged in to JobsDB"""
-        try:
-            # First check if we're already on a logged-in page
-            current_url = self.driver.current_url
-            if any(indicator in current_url.lower() for indicator in ['profile', 'member', 'dashboard']):
-                return True
-                
-            # Navigate to a page that requires login to verify
-            self.driver.get('https://hk.jobsdb.com/member/profile')
-            time.sleep(2)
-            
-            # Check for login indicators
-            login_indicators = [
-                (By.CLASS_NAME, 'profile-menu'),
-                (By.CLASS_NAME, 'user-menu'),
-                (By.CLASS_NAME, 'member-nav'),
-                (By.XPATH, '//a[contains(@href, "logout") or contains(@href, "signout")]'),
-                (By.XPATH, '//span[contains(text(), "My Profile") or contains(text(), "Profile")]')
-            ]
-            
-            for by_type, selector in login_indicators:
-                try:
-                    element = WebDriverWait(self.driver, 5).until(
-                        EC.presence_of_element_located((by_type, selector))
-                    )
-                    if element.is_displayed():
-                        print("User is already logged in to JobsDB.")
-                        return True
-                except TimeoutException:
-                    continue
-                    
-            # Check if we're redirected to login page
-            if 'login' in self.driver.current_url.lower():
-                return False
-                
-        except Exception as e:
-            print(f"Error checking login status: {e}")
-            
-        return False
 
     def logout(self):
         """Logout from JobsDB"""

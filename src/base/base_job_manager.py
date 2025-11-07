@@ -7,7 +7,7 @@ from itertools import product
 from pathlib import Path
 from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.common.by import By
-import src.utils as utils
+import src.utils.utils as utils
 from src.utils.job import Job
 import json
 

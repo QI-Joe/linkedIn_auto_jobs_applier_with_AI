@@ -10,7 +10,7 @@ from webdriver_manager.chrome import ChromeDriverManager
 from selenium.common.exceptions import WebDriverException, TimeoutException
 from lib_resume_builder_AIHawk import Resume, StyleManager, FacadeManager, ResumeGenerator 
 from src.utils.utils import chromeBrowserOptions
-from utils.gpt import GPTAnswerer
+from src.utils.gpt import GPTAnswerer
 from src.linkedin.linkedIn_authenticator import LinkedInAuthenticator
 from src.linkedin.linkedIn_bot_facade import LinkedInBotFacade
 from src.linkedin.linkedIn_job_manager import LinkedInJobManager
@@ -19,8 +19,8 @@ from src.jobsdb.jobsdb_bot_facade import JobsDBBotFacade
 from src.jobsdb.jobsdb_job_manager import JobsDBJobManager
 from src.utils.job_application_profile import JobApplicationProfile
 
-# Suppress stderr
-sys.stderr = open(os.devnull, 'w')
+# Suppress stderr - TEMPORARILY DISABLED FOR DEBUGGING
+# sys.stderr = open(os.devnull, 'w')
 
 class ConfigError(Exception):
     pass
@@ -202,7 +202,7 @@ def create_and_run_bot(email: str, password: str, parameters: dict, openai_api_k
         raise RuntimeError(f"Error running the bot: {str(e)}")
 
 
-file_path: str = r"/mnt/d/StudyWork/Job Application/Qi Shihao.pdf"
+file_path: str = r"D:/StudyWork/Job Application/Qi Shihao.pdf"
 @click.command()
 @click.option('--resume', type=click.Path(exists=True, file_okay=True, dir_okay=False, path_type=Path), default=file_path, help="Path to the resume PDF file")
 @click.option('--platform', type=click.Choice(['linkedin', 'jobsdb'], case_sensitive=False), default='jobsdb', help="Platform to apply jobs on (linkedin or jobsdb)")
