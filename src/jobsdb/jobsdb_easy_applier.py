@@ -10,6 +10,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 import src.utils.utils as utils
 from src.base.base_easy_applier import BaseEasyApplier
+from src.utils.coverLetter import CoverLetterPDF
 
 
 class JobsDBEasyApplier(BaseEasyApplier):
@@ -21,7 +22,8 @@ class JobsDBEasyApplier(BaseEasyApplier):
     def __init__(self, driver: Any, resume_dir: Optional[str], set_old_answers: List, gpt_answerer: Any, resume_generator_manager):
         super().__init__(driver, resume_dir, set_old_answers, gpt_answerer, resume_generator_manager)
         self.base_url = "https://hk.jobsdb.com"
-    
+        self.cover_letter_operator = CoverLetterPDF()
+
     def get_job_search_url(self):
         self.job_title, self.job_posting_date_range = "ai-engineer-jobs", 14
         target_url=f"{self.base_url}/{self.job_title}?daterange={self.job_posting_date_range}"
@@ -178,6 +180,7 @@ class JobsDBEasyApplier(BaseEasyApplier):
             # Wait for sidebar
             sidebar = self._wait_for_sidebar(jumped)
             
+            time.sleep(5)
             # Extract job info
             job_info = self._extract_job_info_from_sidebar(sidebar, job_id)
             
@@ -217,16 +220,17 @@ class JobsDBEasyApplier(BaseEasyApplier):
                 link = card.find_element(By.CSS_SELECTOR, selector)
                 self._click_with_retry(link)
                 
+                current_windows_handle = list(self.driver.window_handles)[0]
                 current_windows_url = self.driver.current_url
-                if self.job_title not in str(current_windows_url).split('/'):
-                    return True, current_windows_url
-                return False, current_windows_url
+                if self.job_title not in str(current_windows_url):
+                    return True, current_windows_handle
+                return False, current_windows_handle
             except Exception:
                 # should add in log...
                 continue
         
 
-    def _wait_for_sidebar(self, jumped: bool) -> WebElement:
+    def _wait_for_sidebar(self, jumped:bool) -> WebElement:
         """Wait for sidebar to appear"""
         selectors = [
             'div[data-automation="splitViewJobDetailsWrapper"]',
@@ -271,28 +275,19 @@ class JobsDBEasyApplier(BaseEasyApplier):
         """Extract job info from sidebar"""
         info = {
             'job_id': job_id,
-            'title': 'Unknown',
-            'company': 'Unknown',
+            'title': 'h1[data-automation="job-detail-title"]',
+            'company': '[data-automation="advertiser-name"]',
+            'work_style': '[data-automation="job-detail-work-type"]',
+            'salary': '[data-automation="job-detail-salary"]',
             'link': self.driver.current_url
         }
         
         # Extract title
-        title_selectors = ['h1[data-automation="jobTitle"]', '.job-title', 'h1', 'h2']
-        for selector in title_selectors:
+        for k, v in info.items():
             try:
-                title_element = sidebar.find_element(By.CSS_SELECTOR, selector)
-                info['title'] = title_element.text.strip()
-                break
-            except Exception:
-                continue
-        
-        # Extract company
-        company_selectors = ['[data-automation="jobCompany"]', '.company-name', 'a[href*="/companies/"]']
-        for selector in company_selectors:
-            try:
-                company_element = sidebar.find_element(By.CSS_SELECTOR, selector)
-                info['company'] = company_element.text.strip()
-                break
+                element = sidebar.find_element(By.CSS_SELECTOR, v)
+                text = element.text.strip()
+                info[k] = text
             except Exception:
                 continue
         
@@ -316,27 +311,34 @@ class JobsDBEasyApplier(BaseEasyApplier):
             time.sleep(random.uniform(2, 4))
             
             # Check for new tab
-            if new_windows is None:
-                new_windows = set(self.driver.window_handles) - existing_windows
+            if new_windows[0] is None:
+                new_windows = set(self.driver.window_handles) - existing_windows            
+                # Switch to new tab
+                new_window = list(new_windows)[0]
+                self.driver.switch_to.window(new_window)
             
-            # Switch to new tab
-            new_window = list(new_windows)[0]
-            self.driver.switch_to.window(new_window)
-            
+            self.cover_letter_operator.load_and_generate(
+                company_name=job_info['company'],
+                position_name=job_info['title']
+            )
             try:
-                # Create fake job object for form filling
-                fake_job = self._create_job_object_from_info(job_info)
-                fake_job.set_job_description(job_info.get('title', 'Unknown'))
-                self.gpt_answerer.set_job(fake_job)
+                # Add debugging info before upload
+                # utils.printyellow(f"JobsDB: Current URL before upload: {self.driver.current_url}")
+                # utils.printyellow(f"JobsDB: Number of windows: {len(self.driver.window_handles)}")
+                # utils.printyellow(f"JobsDB: Current window handle: {self.driver.current_window_handle}")
                 
-                # Fill application forms
-                self._fill_application_forms(fake_job)
+                # Wait a bit for page to fully load
+                time.sleep(2)
+                
+                self.cover_letter_upload()
+
                 
                 utils.printyellow(f"JobsDB: Applied to {job_info['title']} at {job_info['company']}")
                 return True
                 
             except Exception as e:
                 utils.printred(f"JobsDB: Form filling failed: {str(e)}")
+                utils.printred(f"JobsDB: Current URL when failed: {self.driver.current_url}")
                 return False
             finally:
                 # Close new tab and return to main
@@ -350,213 +352,446 @@ class JobsDBEasyApplier(BaseEasyApplier):
             utils.printred(f"JobsDB: Application failed: {str(e)}")
             return False
 
-    def _create_job_object_from_info(self, job_info: dict):
-        """Create job object from info"""
-        from src.utils.job import Job
-        
-        return Job(
-            title=job_info.get('title', 'Unknown'),
-            company=job_info.get('company', 'Unknown'),
-            location='Unknown',
-            apply_method='Quick Apply',
-            link=job_info.get('link', ''),
-            platform='jobsdb'
-        )
-
-
-    def _get_job_description(self) -> str:
-        """Extract job description from JobsDB job page"""
+    def cover_letter_upload(self):
+        """Upload cover letter to JobsDB application form"""
         try:
-            description_selectors = [
-                '[data-automation="jobDescription"]',
-                '.job-description',
-                '.job-details',
-                '#job-description'
-            ]
+            utils.printyellow("JobsDB: Starting cover letter upload...")
+            wait = WebDriverWait(self.driver, 20, poll_frequency=0.2)
+
+            # 1) Wait for the radiogroup to be visible
+            group = wait.until(
+                EC.visibility_of_element_located((By.CSS_SELECTOR, "fieldset[role='radiogroup'][id^='coverLetter-method-']"))
+            )
+            utils.printyellow("JobsDB: Found radiogroup")
+
+            # 2) Find the upload radio and its label - click the label, not the input
+            upload_radio = group.find_element(By.CSS_SELECTOR, "input[type='radio'][data-testid='coverLetter-method-upload']")
+            radio_id = upload_radio.get_attribute("id")
+            upload_label = group.find_element(By.CSS_SELECTOR, f"label[for='{radio_id}']")
+            utils.printyellow(f"JobsDB: Found radio with ID: {radio_id}")
+
+            # 3) Scroll label into view and click it
+            self.driver.execute_script("arguments[0].scrollIntoView({block:'center'});", upload_label)
+            time.sleep(0.1)
+
+            # Check if already selected
+            is_selected = upload_radio.is_selected() or upload_radio.get_attribute("aria-checked") == "true"
             
-            for selector in description_selectors:
+            if not is_selected:
+                # Click the label (not the hidden input)
+                upload_label.click()
+                utils.printyellow("JobsDB: Clicked upload label")
+                
+                # Wait for selection to take effect
+                wait.until(lambda d: upload_radio.is_selected() or upload_radio.get_attribute("aria-checked") == "true")
+            
+            utils.printyellow("JobsDB: Upload option selected")
+
+            # 4) Find file input - it exists but is hidden
+            file_input = group.find_element(By.CSS_SELECTOR, "input#coverLetter-fileFile[data-testid='file-input'][type='file']")
+            
+            # 5) Make file input interactable (keep it off-screen but functional)
+            self.driver.execute_script("""
+                const el = arguments[0];
+                el.style.display = 'block';
+                el.style.visibility = 'visible';
+                el.style.opacity = '1';
+                el.style.position = 'fixed';
+                el.style.left = '-9999px';
+                el.style.top = '0';
+                el.style.width = '1px';
+                el.style.height = '1px';
+                el.removeAttribute('hidden');
+            """, file_input)
+            
+            # 6) Upload file
+            cover_letter_path = self.cover_letter_operator.get_cover_letter_path()
+            if not cover_letter_path or not os.path.exists(cover_letter_path):
+                raise Exception("Cover letter file not found")
+                
+            file_input.send_keys(str(cover_letter_path))
+            utils.printyellow(f"JobsDB: Uploaded file: {cover_letter_path}")
+            
+            # 7) Verify upload by checking file input value
+            file_name = os.path.basename(cover_letter_path)
+            wait.until(lambda d: file_name.lower() in (file_input.get_attribute("value") or "").lower())
+            utils.printyellow("JobsDB: Upload confirmed")
+            
+            btn = WebDriverWait(self.driver, 20).until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, "button[data-testid='continue-button']"))
+            )
+            # scroll into view (helps avoid intercepts)
+            self.driver.execute_script("arguments[0].scrollIntoView({block:'center'});", btn)
+            btn.click()
+            
+        except Exception as e:
+            utils.printred(f"JobsDB: Cover letter upload failed: {str(e)}")
+            raise Exception(f"Failed to upload cover letter: {str(e)}")
+
+    def fillin_form(self):
+        """
+        Fill in JobsDB application form after cover letter upload
+        """
+        try:
+            utils.printyellow("JobsDB: Starting form filling...")
+            
+            # Wait for form to load
+            form = WebDriverWait(self.driver, 10).until(
+                EC.visibility_of_element_located((By.CSS_SELECTOR, "form"))
+            )
+            utils.printyellow("JobsDB: Form loaded successfully")
+            
+            # Process single select problems (radio buttons)
+            self.capture_single_select_problem(form)
+            
+            # Process dropdown problems
+            self.capture_dropdown_problem(form)
+            
+            # TODO: Add multi-select processing when needed
+            # self.capture_multi_select_problem(form)
+            
+            utils.printyellow("JobsDB: Form filling completed successfully")
+            return True
+            
+        except Exception as e:
+            utils.printred(f"JobsDB: Form filling failed: {str(e)}")
+            raise
+
+    def capture_single_select_problem(self, form: WebElement):
+        """
+        Capture and answer single select problems (radio button groups) in JobsDB form
+        Based on observed structure: fieldset with role='radiogroup' containing question and options
+        """
+        try:
+            utils.printyellow("JobsDB: Processing single select problems...")
+            
+            # Find all fieldset elements with role='radiogroup' (single select problems)
+            fieldsets = form.find_elements(By.CSS_SELECTOR, "fieldset[role='radiogroup']")
+            
+            if not fieldsets:
+                utils.printyellow("JobsDB: No single select problems found")
+                return
+            
+            utils.printyellow(f"JobsDB: Found {len(fieldsets)} single select problem(s)")
+            
+            for i, fieldset in enumerate(fieldsets):
                 try:
-                    description_element = self.driver.find_element(By.CSS_SELECTOR, selector)
-                    description_text = description_element.text.strip()
-                    if description_text and len(description_text) > 50:
-                        return description_text
-                except NoSuchElementException:
+                    utils.printyellow(f"JobsDB: Processing single select problem {i+1}")
+                    
+                    # 1. Extract question text from legend element
+                    question_text = ""
+                    try:
+                        legend = fieldset.find_element(By.CSS_SELECTOR, "legend")
+                        question_text = legend.text.strip()
+                    except:
+                        utils.printred(f"JobsDB: Could not find question text for single select {i+1}")
+                        continue
+                    
+                    if not question_text:
+                        utils.printred(f"JobsDB: Empty question text for single select {i+1}")
+                        continue
+                    
+                    # 2. Extract all radio options
+                    radio_inputs = fieldset.find_elements(By.CSS_SELECTOR, "input[type='radio']")
+                    
+                    if not radio_inputs:
+                        utils.printred(f"JobsDB: No radio options found for single select {i+1}")
+                        continue
+                    
+                    options = {}
+                    option_elements = {}
+                    
+                    for j, radio in enumerate(radio_inputs):
+                        try:
+                            # Get radio input ID to find corresponding label
+                            radio_id = radio.get_attribute("id")
+                            if not radio_id:
+                                continue
+                            
+                            # Find label for this radio button
+                            label = fieldset.find_element(By.CSS_SELECTOR, f"label[for='{radio_id}']")
+                            option_text = label.text.strip()
+                            
+                            if option_text:
+                                option_key = chr(65 + j)  # A, B, C, D...
+                                options[option_key] = option_text
+                                option_elements[option_key] = radio
+                                
+                        except Exception as e:
+                            utils.printred(f"JobsDB: Error extracting option {j+1}: {str(e)}")
+                            continue
+                    
+                    if not options:
+                        utils.printred(f"JobsDB: No valid options found for single select {i+1}")
+                        continue
+                    
+                    # 3. Prepare question for AI
+                    ai_question = {
+                        "Question": question_text,
+                        "options": options
+                    }
+                    
+                    utils.printyellow(f"JobsDB: Question: {question_text}")
+                    utils.printyellow(f"JobsDB: Options: {options}")
+                    
+                    # 4. Ask AI for answer
+                    try:
+                        ai_answer = self.gpt_answerer.ask_AI(ai_question)
+                        if not ai_answer or not isinstance(ai_answer, list) or len(ai_answer) == 0:
+                            utils.printred(f"JobsDB: Invalid AI response for single select {i+1}")
+                            continue
+                        
+                        selected_option = ai_answer[0]  # Take first answer from list
+                        utils.printyellow(f"JobsDB: AI selected option: {selected_option}")
+                        
+                        # 5. Select the corresponding radio button
+                        if selected_option in option_elements:
+                            radio_element = option_elements[selected_option]
+                            
+                            # Scroll to element and click
+                            self.driver.execute_script("arguments[0].scrollIntoView({block:'center'});", radio_element)
+                            time.sleep(0.2)
+                            
+                            # Click the radio button
+                            self._click_with_retry(radio_element)
+                            utils.printyellow(f"JobsDB: Successfully selected option {selected_option}: {options[selected_option]}")
+                            
+                        else:
+                            raise Exception(f"JobsDB: AI answer '{selected_option}' not found in available options")
+                            
+                    except Exception as e:
+                        utils.printred(f"JobsDB: Error getting AI answer for single select {i+1}: {str(e)}")
+                        continue
+                        
+                except Exception as e:
+                    utils.printred(f"JobsDB: Error processing single select problem {i+1}: {str(e)}")
                     continue
             
-            # Fallback: get page text
-            page_text = self.driver.find_element(By.TAG_NAME, 'body').text
-            return page_text[:2000]
+            utils.printyellow("JobsDB: Finished processing all single select problems")
             
         except Exception as e:
-            utils.printred(f"JobsDB: Could not extract job description: {str(e)}")
-            return "Job description not available"
+            utils.printred(f"JobsDB: Error in capture_single_select_problem: {str(e)}")
+            raise
 
-    def _fill_application_forms(self, job):
-        """Fill JobsDB application forms with multi-page support"""
-        max_attempts = 10
-        attempt = 0
-        
-        while attempt < max_attempts:
-            utils.printyellow(f"JobsDB: Processing form page {attempt + 1}")
-            
-            # Process form elements on current page using base class methods
-            form_sections = self._get_form_sections()
-            for section in form_sections:
-                self._process_section(section, job)
-            
-            # Check for validation errors
-            if self._check_for_errors():
-                utils.printred("JobsDB: Form validation errors detected")
-                break
-            
-            # Try to proceed - return True if submitted, False if next page
-            if self._try_next_or_submit():
-                utils.printyellow("JobsDB: Application submitted successfully")
-                return
-            
-            attempt += 1
-            time.sleep(random.uniform(2, 4))
-        
-        if attempt >= max_attempts:
-            raise Exception("JobsDB: Maximum form pages exceeded")
-
-    def _get_form_sections(self) -> List[WebElement]:
-        """Get form sections to process"""
-        # Try to find form container first
-        containers = [
-            'form', '.form-container', '.application-form', 
-            '.job-apply-form', 'main', 'body'
-        ]
-        
-        container = None
-        for selector in containers:
-            try:
-                container = self.driver.find_element(By.CSS_SELECTOR, selector)
-                break
-            except NoSuchElementException:
-                continue
-        
-        if not container:
-            container = self.driver.find_element(By.TAG_NAME, 'body')
-        
-        # Find sections with form elements - using multiple selectors since :has() is not widely supported
-        sections = []
-        section_selectors = [
-            '.form-group', '.field-group', '.form-section', '.question-group',
-            'div[class*="form"]', 'div[class*="field"]', 'div[class*="question"]'
-        ]
-        
-        for selector in section_selectors:
-            try:
-                found_sections = container.find_elements(By.CSS_SELECTOR, selector)
-                sections.extend(found_sections)
-            except Exception:
-                continue
-        
-        # Fallback: individual form elements
-        if not sections:
-            sections = container.find_elements(By.CSS_SELECTOR, 'input, textarea, select')
-        
-        return sections[:15]  # Reasonable limit
-    
-    def _process_section(self, section: WebElement, job):
-        """Process form section using base class methods"""
+    def capture_dropdown_problem(self, form: WebElement):
+        """
+        Capture and answer dropdown problems in JobsDB form
+        Based on markdown instructions: find label[for^='question-'] and corresponding select elements
+        """
         try:
-            # Handle upload fields first
-            if self._is_upload_field(section):
-                self._handle_upload_fields(section, job)
+            utils.printyellow("JobsDB: Processing dropdown problems...")
+            
+            # Find all question labels and select elements directly
+            label_section = form.find_elements(By.CSS_SELECTOR, "label[for^='question-']")
+            answer_section = form.find_elements(By.CSS_SELECTOR, "select")
+            
+            if not label_section or not answer_section:
+                utils.printyellow("JobsDB: No dropdown problems found")
                 return
             
-            # Use base class methods for standard form elements
-            if self._find_and_handle_text_question(section):
-                return
-            if self._find_and_handle_dropdown_question(section):
-                return
-            if self._find_and_handle_radio_question(section):
-                return
+            utils.printyellow(f"JobsDB: Found {len(label_section)} question labels and {len(answer_section)} select elements")
             
-            # Handle checkboxes (common in JobsDB for terms/conditions)
-            self._handle_checkboxes(section)
+            for i, (asked_question, answers) in enumerate(zip(label_section, answer_section)):
+                try:
+                    utils.printyellow(f"JobsDB: Processing dropdown problem {i+1}")
+                    
+                    # Extract options from select element
+                    given_options = answers.find_elements(By.CSS_SELECTOR, "option")
+                    question_text = asked_question.text.strip()
+                    options = {}
+                    option_values = {}
+                    key_index = 0
+
+                    for j, option in enumerate(given_options):
+                        try:
+                            option_value = option.get_attribute("value")
+                            option_text = option.text.strip()
+                            if option_value == "" or option_text.lower() == "":
+                                continue
+                            
+                            option_key = chr(65 + key_index)  # A, B, C, D...
+                            options[option_key] = option_text
+                            option_values[option_key] = option_value
+                            key_index += 1  # Only increment when we add a valid option
+                                
+                        except Exception as e:
+                            utils.printred(f"JobsDB: Error extracting option {j+1}: {str(e)}")
+                            continue
+                    
+                    if not options:
+                        utils.printred(f"JobsDB: No valid options found for dropdown {i+1}")
+                        continue
+                    
+                    # Prepare question for AI
+                    ai_question = {
+                        "Question": question_text,
+                        "options": options
+                    }
+                    
+                    utils.printyellow(f"JobsDB: Question: {question_text}")
+                    utils.printyellow(f"JobsDB: Options: {options}")
+                    
+                    # Ask AI for answer
+                    try:
+                        ai_answer = self.gpt_answerer.ask_AI(ai_question)
+                        if not ai_answer or not isinstance(ai_answer, list) or len(ai_answer) == 0:
+                            utils.printred(f"JobsDB: Invalid AI response for dropdown {i+1}")
+                            continue
+                            
+                        selected_option = ai_answer[0]  # Take first answer from list
+                        utils.printyellow(f"JobsDB: AI selected option: {selected_option}")
+                        
+                        # Select the corresponding option in dropdown
+                        if selected_option in option_values:
+                            option_value = option_values[selected_option]
+                            
+                            # Scroll to select element
+                            self.driver.execute_script("arguments[0].scrollIntoView({block:'center'});", answers)
+                            time.sleep(0.2)
+                            
+                            # Select the option by value
+                            from selenium.webdriver.support.ui import Select
+                            select = Select(answers)
+                            select.select_by_value(option_value)
+                            
+                            utils.printyellow(f"JobsDB: Successfully selected option {selected_option}: {options[selected_option]}")
+                            
+                        else:
+                            raise Exception(f"JobsDB: AI answer '{selected_option}' not found in available options")
+                            
+                    except Exception as e:
+                        utils.printred(f"JobsDB: Error getting AI answer for dropdown {i+1}: {str(e)}")
+                        continue
+                        
+                except Exception as e:
+                    utils.printred(f"JobsDB: Error processing dropdown problem {i+1}: {str(e)}")
+                    continue
+            
+            utils.printyellow("JobsDB: Finished processing all dropdown problems")
+            
+        except Exception as e:
+            utils.printred(f"JobsDB: Error in capture_dropdown_problem: {str(e)}")
+            raise
+
+    def capture_multi_select_problem(self, form: WebElement):
+        """
+        Capture and answer multi-select checkbox problems in JobsDB form
+        Based on markdown instructions: div class="_1m3jlfo0 _1tzn2gi5c _1tzn2gihk _1tzn2gi70" contains question and checkboxes
+        """
+        utils.printyellow("JobsDB: Processing multi-select problems...")
+        
+        # Find all multi-select problem sections using the specific hash class
+        multi_select_sections = form.find_elements(By.CSS_SELECTOR, "div._1m3jlfo0._1tzn2gi5c._1tzn2gihk._1tzn2gi70")
+        
+        if not multi_select_sections:
+            utils.printyellow("JobsDB: No multi-select problems found")
+            return
+        
+        utils.printyellow(f"JobsDB: Found {len(multi_select_sections)} multi-select problem(s)")
+        
+        for i, section in enumerate(multi_select_sections):
+            try:
+                utils.printyellow(f"JobsDB: Processing multi-select problem {i+1}")
                 
-        except Exception as e:
-            utils.printred(f"JobsDB: Error processing section: {str(e)}")
-
-    def _handle_checkboxes(self, section: WebElement):
-        """Handle checkbox elements"""
-        try:
-            checkboxes = section.find_elements(By.CSS_SELECTOR, 'input[type="checkbox"]')
-            for checkbox in checkboxes:
-                # Auto-accept terms and conditions
-                parent_text = section.text.lower()
-                if any(term in parent_text for term in ['terms', 'privacy', 'policy', 'agreement']):
-                    if not checkbox.is_selected():
-                        self._click_with_retry(checkbox)
-        except Exception:
-            pass
-
-    def _try_next_or_submit(self) -> bool:
-        """Try to click next or submit button - returns True if submitted"""
-        # Look for submit button first
-        submit_selectors = self.get_platform_selectors()['submit_button']
-        for selector in submit_selectors:
-            try:
-                button = self.driver.find_element(By.CSS_SELECTOR, selector)
-                if button.is_displayed() and button.is_enabled():
-                    utils.printyellow("JobsDB: Clicking submit button")
-                    self._click_with_retry(button)
-                    time.sleep(random.uniform(2, 4))
-                    return True
-            except NoSuchElementException:
-                continue
-        
-        # Look for next button
-        next_selectors = self.get_platform_selectors()['next_button']
-        for selector in next_selectors:
-            try:
-                button = self.driver.find_element(By.CSS_SELECTOR, selector)
-                if button.is_displayed() and button.is_enabled():
-                    utils.printyellow("JobsDB: Clicking next button")
-                    self._click_with_retry(button)
-                    time.sleep(random.uniform(2, 4))
-                    return False  # Continue to next page
-            except NoSuchElementException:
-                continue
-        
-        # Fallback: look for any relevant button
-        button_texts = ['submit', 'send', 'apply', 'next', 'continue']
-        for text in button_texts:
-            try:
-                button = self.driver.find_element(By.XPATH, 
-                    f'//button[contains(translate(text(), "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"), "{text}")]')
-                if button.is_displayed() and button.is_enabled():
-                    utils.printyellow(f"JobsDB: Clicking button: {button.text}")
-                    self._click_with_retry(button)
-                    time.sleep(random.uniform(2, 4))
-                    return text in ['submit', 'send', 'apply']
-            except NoSuchElementException:
-                continue
-        
-        raise Exception("JobsDB: No next or submit button found")
-
-    def _return_to_job_list(self):
-        """Navigate back to job search results"""
-        try:
-            # Try browser back first
-            self.driver.back()
-            time.sleep(random.uniform(2, 3))
-            
-            # If back doesn't work, navigate to search page
-            current_url = self.driver.current_url.lower()
-            if 'search' not in current_url and 'jobs' not in current_url:
-                search_url = f"{self.base_url}/hk/search-jobs"
-                utils.printyellow("JobsDB: Navigating to search page")
-                self.driver.get(search_url)
-                time.sleep(random.uniform(2, 4))
+                # 1. Extract question text from div with specific class
+                question_text = ""
+                try:
+                    question_div = section.find_element(By.CSS_SELECTOR, "div._1m3jlfo0._1tzn2gi5c._1tzn2gihk._1tzn2gi6w._1tzn2giic")
+                    question_text = question_div.text.strip()
+                except:
+                    utils.printred(f"JobsDB: Could not find question text for multi-select {i+1}")
+                    continue
                 
-        except Exception as e:
-            utils.printred(f"JobsDB: Error returning to job list: {str(e)}")
-            self.driver.get(self.base_url)
-            time.sleep(random.uniform(2, 4))
+                if not question_text:
+                    utils.printred(f"JobsDB: Empty question text for multi-select {i+1}")
+                    continue
+                
+                # 2. Find all checkbox elements
+                checkbox_elements = section.find_elements(By.CSS_SELECTOR, "input[type='checkbox']")
+                
+                if not checkbox_elements:
+                    utils.printred(f"JobsDB: No checkbox options found for multi-select {i+1}")
+                    continue
+                
+                options = {}
+                option_elements = {}
+                key_index = 0
+                
+                for j, checkbox in enumerate(checkbox_elements):
+                    try:
+                        # Get checkbox ID to find corresponding label
+                        checkbox_id = checkbox.get_attribute("id")
+                        
+                        # Find label for this checkbox
+                        try:
+                            label = section.find_element(By.CSS_SELECTOR, f"label[for='{checkbox_id}']")
+                            option_text = label.text.strip()
+                        except:
+                            # If no label found, try to get text from parent or sibling elements
+                            try:
+                                option_text = checkbox.find_element(By.XPATH, "following-sibling::*[1]").text.strip()
+                            except:
+                                try:
+                                    option_text = checkbox.find_element(By.XPATH, "..").text.strip()
+                                except:
+                                    continue
+                        
+                        if option_text:
+                            option_key = chr(65 + key_index)  # A, B, C, D...
+                            options[option_key] = option_text
+                            option_elements[option_key] = checkbox
+                            key_index += 1
+                            
+                    except Exception as e:
+                        utils.printred(f"JobsDB: Error extracting checkbox option {j+1}: {str(e)}")
+                        continue
+                
+                if not options:
+                    utils.printred(f"JobsDB: No valid checkbox options found for multi-select {i+1}")
+                    continue
+                
+                # 3. Prepare question for AI
+                ai_question = {
+                    "Question": question_text,
+                    "options": options
+                }
+                
+                utils.printyellow(f"JobsDB: Question: {question_text}")
+                utils.printyellow(f"JobsDB: Options: {options}")
+                
+                # 4. Ask AI for answer
+                try:
+                    ai_answer = self.gpt_answerer.ask_AI(ai_question)
+                    
+                    utils.printyellow(f"JobsDB: AI selected options: {ai_answer}")
+                    
+                    # 5. Select/deselect the corresponding checkboxes
+                    for option_key, checkbox_element in option_elements.items():
+                        
+                        is_selected = checkbox_element.is_selected() or checkbox_element.get_attribute("aria-checked") == "true"
+                        
+                        # Scroll to element
+                        if (option_key in ai_answer and is_selected) or (option_key not in ai_answer and not is_selected):
+                            continue  # Already in desired state
+                        self.driver.execute_script("arguments[0].scrollIntoView({block:'center'});", checkbox_element)
+                        time.sleep(0.2)
+                        
+                        # Click the checkbox to change state
+                        self._click_with_retry(checkbox_element)
+                    
+                    utils.printyellow(f"JobsDB: Successfully processed multi-select problem {i+1}")
+                    
+                except Exception as e:
+                    utils.printred(f"JobsDB: Error getting AI answer for multi-select {i+1}: {str(e)}")
+                    continue
+                    
+            except Exception as e:
+                utils.printred(f"JobsDB: Error processing multi-select problem {i+1}: {str(e)}")
+                continue
+        
+        utils.printyellow("JobsDB: Finished processing all multi-select problems")
+            
+            
 
     def _discard_application(self) -> None:
         """Discard JobsDB application and return to job listing"""

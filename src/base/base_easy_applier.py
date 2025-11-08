@@ -10,6 +10,7 @@ from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.remote.webelement import WebElement
+from selenium.webdriver.remote.webdriver import WebDriver
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import Select, WebDriverWait
 from selenium.webdriver import ActionChains
@@ -22,10 +23,10 @@ class BaseEasyApplier(ABC):
     Provides common form processing and interaction patterns.
     """
     
-    def __init__(self, driver: Any, resume_dir: Optional[str], set_old_answers: List[Tuple[str, str, str]], gpt_answerer: Any, resume_generator_manager):
+    def __init__(self, driver: WebDriver, resume_dir: Optional[str], set_old_answers: List[Tuple[str, str, str]], gpt_answerer: Any, resume_generator_manager):
         if resume_dir is None or not os.path.exists(resume_dir):
             resume_dir = None
-        self.driver = driver
+        self.driver: WebDriver = driver
         self.resume_path = resume_dir
         self.set_old_answers = set_old_answers
         self.gpt_answerer = gpt_answerer
