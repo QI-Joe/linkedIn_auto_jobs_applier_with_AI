@@ -331,6 +331,9 @@ class JobsDBEasyApplier(BaseEasyApplier):
                 time.sleep(2)
                 
                 self.cover_letter_upload()
+                
+                time.sleep(random.uniform(1, 3))
+                self.fillin_form()
 
                 
                 utils.printyellow(f"JobsDB: Applied to {job_info['title']} at {job_info['company']}")
@@ -444,11 +447,11 @@ class JobsDBEasyApplier(BaseEasyApplier):
             # Process single select problems (radio buttons)
             self.capture_single_select_problem(form)
             
+            time.sleep(random.uniform(1, 4))
             # Process dropdown problems
             self.capture_dropdown_problem(form)
-            
-            # TODO: Add multi-select processing when needed
-            # self.capture_multi_select_problem(form)
+            time.sleep(random.uniform(1, 4))
+            self.capture_multi_select_problem(form)
             
             utils.printyellow("JobsDB: Form filling completed successfully")
             return True
@@ -536,7 +539,7 @@ class JobsDBEasyApplier(BaseEasyApplier):
                     
                     # 4. Ask AI for answer
                     try:
-                        ai_answer = self.gpt_answerer.ask_AI(ai_question)
+                        ai_answer = self.gpt_answerer.standard_simplified_profile_chain(ai_question)
                         if not ai_answer or not isinstance(ai_answer, list) or len(ai_answer) == 0:
                             utils.printred(f"JobsDB: Invalid AI response for single select {i+1}")
                             continue
@@ -624,7 +627,7 @@ class JobsDBEasyApplier(BaseEasyApplier):
                     
                     # Prepare question for AI
                     ai_question = {
-                        "Question": question_text,
+                        "Question": question_text + " (Select multiple option)",
                         "options": options
                     }
                     
@@ -633,7 +636,7 @@ class JobsDBEasyApplier(BaseEasyApplier):
                     
                     # Ask AI for answer
                     try:
-                        ai_answer = self.gpt_answerer.ask_AI(ai_question)
+                        ai_answer = self.gpt_answerer.standard_simplified_profile_chain(ai_question)
                         if not ai_answer or not isinstance(ai_answer, list) or len(ai_answer) == 0:
                             utils.printred(f"JobsDB: Invalid AI response for dropdown {i+1}")
                             continue
@@ -761,7 +764,7 @@ class JobsDBEasyApplier(BaseEasyApplier):
                 
                 # 4. Ask AI for answer
                 try:
-                    ai_answer = self.gpt_answerer.ask_AI(ai_question)
+                    ai_answer = self.gpt_answerer.standard_simplified_profile_chain(ai_question)
                     
                     utils.printyellow(f"JobsDB: AI selected options: {ai_answer}")
                     

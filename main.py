@@ -18,6 +18,8 @@ from src.jobsdb.jobsdb_authenticator import JobsDBAuthenticator
 from src.jobsdb.jobsdb_bot_facade import JobsDBBotFacade
 from src.jobsdb.jobsdb_job_manager import JobsDBJobManager
 from src.utils.job_application_profile import JobApplicationProfile
+from src.utils.simplifed_gpt import SimplifedGPT
+from src.utils.simplified_job_application_profile import SimplifiedJobApplicationProfile
 
 # Suppress stderr - TEMPORARILY DISABLED FOR DEBUGGING
 # sys.stderr = open(os.devnull, 'w')
@@ -173,10 +175,17 @@ def create_and_run_bot(email: str, password: str, parameters: dict, openai_api_k
         resume_generator_manager.choose_style()
         os.system('cls' if os.name == 'nt' else 'clear')
         
-        job_application_profile_object = JobApplicationProfile(plain_text_resume)
         
+        if platform.lower() == "jobsdb":
+            with open(r"./env/backup.yaml", "r", encoding='utf-8') as file:
+                plain_text_resume = file.read()
+            job_application_profile_object = SimplifiedJobApplicationProfile(plain_text_resume)
+            gpt_answerer_component = SimplifedGPT(openai_api_key)
+        else:
+            job_application_profile_object = JobApplicationProfile(plain_text_resume)
+            gpt_answerer_component = GPTAnswerer(openai_api_key)
+
         browser = init_browser()
-        gpt_answerer_component = GPTAnswerer(openai_api_key)
         
         # Create platform-specific components
         if platform.lower() == "jobsdb":

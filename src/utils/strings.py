@@ -30,6 +30,60 @@ Self-Identification: {resume_section}
 Question: {question}
 """
 
+visa_in_hk_template = """
+Answer the following question based on the provided visa details.
+
+## Rules
+- Select the question index and directly return index.
+
+## Example
+My resume: Holds a IANG visa for Hong Kong.
+Question: Which of the following statements best describes your right to work in Hong Kong?
+   A. I am Hong Kong permanent resident.
+   B. I hold a temporary visa (IANG, QMAS, TPPS)
+B
+
+Visa in HK: {resume_section}
+Question: {question}
+"""
+
+develop_role_template="""
+Answer the following question based on the provided development role details.
+
+## Rules
+- Select the question index and directly return index. If not matched, like 1.5 years, selected the most closed answer.
+
+## Example
+My resume: 2 years as a software developer.
+Question: How many years' experience do you have in a development role?
+   A. Not Experienced
+   B. 1 year
+   C. 2 years
+C
+
+develop_role: {resume_section}
+Question: {question}
+"""
+
+programming_language_template="""
+Answer the following question based on the provided programming language details.
+
+## Rules
+- Select the question index and directly return index. If instruction given this is a multi-select question, return all that apply sperated by comma.
+
+## Example
+My resume: Experienced in Python and Java.
+Question: Which programming languages are you proficient in?
+   A. Python
+   B. Java
+   C. C++
+   D. JavaScript
+A,B
+
+Programming languages: {resume_section}
+Question: {question}
+"""
+
 # Legal Authorization Template
 legal_authorization_template = """
 Answer the following question based on the provided legal authorization details.
@@ -83,22 +137,29 @@ Question: {question}
 
 # Experience Details Template
 experience_details_template = """
-Answer the following question based on the provided experience details.
-
-## Rules
-- Answer questions directly.
-- If it seems likely that you have the experience, even if not explicitly defined, answer as if you have the experience.
-- If unsure, respond with "I have no experience with that, but I learn fast" or "Not yet, but willing to learn."
-- Keep the answer under 140 characters.
-
-## Example
-My resume: 3 years as a software developer with leadership experience.
-Question: Do you have leadership experience?
-Yes, I have 3 years of leadership experience.
+Not required to answer, read and understand as background information, even received question, do not answer based on this template.
 
 Experience Details: {resume_section}
 Question: {question}
 """
+
+# experience_details_template = """
+# Answer the following question based on the provided experience details.
+
+# ## Rules
+# - Answer questions directly.
+# - If it seems likely that you have the experience, even if not explicitly defined, answer as if you have the experience.
+# - If unsure, respond with "I have no experience with that, but I learn fast" or "Not yet, but willing to learn."
+# - Keep the answer under 140 characters.
+
+# ## Example
+# My resume: 3 years as a software developer with leadership experience.
+# Question: Do you have leadership experience?
+# Yes, I have 3 years of leadership experience.
+
+# Experience Details: {resume_section}
+# Question: {question}
+# """
 
 # Projects Template
 projects_template = """
@@ -123,14 +184,14 @@ availability_template = """
 Answer the following question based on the provided availability details.
 
 ## Rules
-- Answer questions directly.
-- Keep the answer under 140 characters.
-- Use periods only if the answer has multiple sentences.
+- Select the question index and directly return index. If instruction given this is a multi-select question, return all that apply sperated by comma.
 
 ## Example
 My resume: Available to start immediately.
 Question: When can you start?
-I can start immediately.
+   A. immediately.
+   B. In 2 weeks.
+A
 
 Availability: {resume_section}
 Question: {question}
@@ -141,14 +202,15 @@ salary_expectations_template = """
 Answer the following question based on the provided salary expectations.
 
 ## Rules
-- Answer questions directly.
-- Keep the answer under 140 characters.
-- Use periods only if the answer has multiple sentences.
+- Select the question index and directly return index. If instruction given this is a multi-select question, return all that apply sperated by comma.
 
 ## Example
-My resume: Looking for a salary in the range of 50k-60k USD.
+My resume: Looking for a salary in the range of 25K HKD per month.
 Question: What are your salary expectations?
-55000.
+   A. 20K per month
+   B. 25K per month
+   C. 30K per month
+B
 
 Salary Expectations: {resume_section}
 Question: {question}
@@ -178,15 +240,15 @@ languages_template = """
 Answer the following question based on the provided language skills.
 
 ## Rules
-- Answer questions directly.
-- If it seems likely that you have the experience, even if not explicitly defined, answer as if you have the experience.
-- If unsure, respond with "I have no experience with that, but I learn fast" or "Not yet, but willing to learn."
-- Keep the answer under 140 characters.
+- Select the question index and directly return index. If instruction given this is a multi-select question, return all that apply sperated by comma.
 
 ## Example
-My resume: Fluent in Italian and English.
+My resume: Fluent in Madrian and English.
 Question: What languages do you speak?
-Fluent in Italian and English.
+   A. Madrian
+   B. English
+   C. Italian
+A, B
 
 Languages: {resume_section}
 Question: {question}

@@ -34,7 +34,7 @@ class JobsDBBotFacade:
         self.apply_component: JobsDBJobManager = apply_component
         self.state: JobsDBBotState = JobsDBBotState()
         self.job_application_profile: Optional[JobApplicationProfile] = None
-        self.resume: Optional[str] = None
+        self.resume: Optional[str] = False
         self.email: Optional[str] = None
         self.password: Optional[str] = None
         self.parameters: Optional[Dict[str, Any]] = None
@@ -43,7 +43,7 @@ class JobsDBBotFacade:
         self._validate_non_empty(job_application_profile, "Job application profile")
         self._validate_non_empty(resume, "Resume")
         self.job_application_profile = job_application_profile
-        self.resume = resume
+        self.resume = False
         self.state.job_application_profile_set = True
 
     def set_secrets(self, email: str, password: str) -> None:
