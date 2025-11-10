@@ -12,6 +12,12 @@ import src.utils.utils as utils
 from src.base.base_easy_applier import BaseEasyApplier
 from src.utils.coverLetter import CoverLetterPDF
 
+def charIsIn(receiver: str, examiner: list[str]):
+    recvlist = receiver.split()
+    for token in recvlist:
+        if token.strip().upper() in examiner:
+            return True, token.upper()
+    return False, None
 
 class JobsDBEasyApplier(BaseEasyApplier):
     """
@@ -465,116 +471,110 @@ class JobsDBEasyApplier(BaseEasyApplier):
         Capture and answer single select problems (radio button groups) in JobsDB form
         Based on observed structure: fieldset with role='radiogroup' containing question and options
         """
-        try:
-            utils.printyellow("JobsDB: Processing single select problems...")
-            
-            # Find all fieldset elements with role='radiogroup' (single select problems)
-            fieldsets = form.find_elements(By.CSS_SELECTOR, "fieldset[role='radiogroup']")
-            
-            if not fieldsets:
-                utils.printyellow("JobsDB: No single select problems found")
-                return
-            
-            utils.printyellow(f"JobsDB: Found {len(fieldsets)} single select problem(s)")
-            
-            for i, fieldset in enumerate(fieldsets):
+        utils.printyellow("JobsDB: Processing single select problems...")
+        
+        # Find all fieldset elements with role='radiogroup' (single select problems)
+        fieldsets = form.find_elements(By.CSS_SELECTOR, "fieldset[role='radiogroup']")
+        
+        if not fieldsets:
+            utils.printyellow("JobsDB: No single select problems found")
+            return
+        
+        utils.printyellow(f"JobsDB: Found {len(fieldsets)} single select problem(s)")
+        
+        for i, fieldset in enumerate(fieldsets):
+            try:
+                utils.printyellow(f"JobsDB: Processing single select problem {i+1}")
+                
+                # 1. Extract question text from legend element
+                question_text = ""
                 try:
-                    utils.printyellow(f"JobsDB: Processing single select problem {i+1}")
-                    
-                    # 1. Extract question text from legend element
-                    question_text = ""
+                    legend = fieldset.find_element(By.CSS_SELECTOR, "legend")
+                    question_text = legend.text.strip()
+                except:
+                    utils.printred(f"JobsDB: Could not find question text for single select {i+1}")
+                    continue
+                
+                if not question_text:
+                    utils.printred(f"JobsDB: Empty question text for single select {i+1}")
+                    continue
+                
+                # 2. Extract all radio options
+                radio_inputs = fieldset.find_elements(By.CSS_SELECTOR, "input[type='radio']")
+                
+                if not radio_inputs:
+                    utils.printred(f"JobsDB: No radio options found for single select {i+1}")
+                    continue
+                
+                options = {}
+                option_elements = {}
+                
+                for j, radio in enumerate(radio_inputs):
                     try:
-                        legend = fieldset.find_element(By.CSS_SELECTOR, "legend")
-                        question_text = legend.text.strip()
-                    except:
-                        utils.printred(f"JobsDB: Could not find question text for single select {i+1}")
-                        continue
-                    
-                    if not question_text:
-                        utils.printred(f"JobsDB: Empty question text for single select {i+1}")
-                        continue
-                    
-                    # 2. Extract all radio options
-                    radio_inputs = fieldset.find_elements(By.CSS_SELECTOR, "input[type='radio']")
-                    
-                    if not radio_inputs:
-                        utils.printred(f"JobsDB: No radio options found for single select {i+1}")
-                        continue
-                    
-                    options = {}
-                    option_elements = {}
-                    
-                    for j, radio in enumerate(radio_inputs):
-                        try:
-                            # Get radio input ID to find corresponding label
-                            radio_id = radio.get_attribute("id")
-                            if not radio_id:
-                                continue
-                            
-                            # Find label for this radio button
-                            label = fieldset.find_element(By.CSS_SELECTOR, f"label[for='{radio_id}']")
-                            option_text = label.text.strip()
-                            
-                            if option_text:
-                                option_key = chr(65 + j)  # A, B, C, D...
-                                options[option_key] = option_text
-                                option_elements[option_key] = radio
-                                
-                        except Exception as e:
-                            utils.printred(f"JobsDB: Error extracting option {j+1}: {str(e)}")
-                            continue
-                    
-                    if not options:
-                        utils.printred(f"JobsDB: No valid options found for single select {i+1}")
-                        continue
-                    
-                    # 3. Prepare question for AI
-                    ai_question = {
-                        "Question": question_text,
-                        "options": options
-                    }
-                    
-                    utils.printyellow(f"JobsDB: Question: {question_text}")
-                    utils.printyellow(f"JobsDB: Options: {options}")
-                    
-                    # 4. Ask AI for answer
-                    try:
-                        ai_answer = self.gpt_answerer.standard_simplified_profile_chain(ai_question)
-                        if not ai_answer or not isinstance(ai_answer, list) or len(ai_answer) == 0:
-                            utils.printred(f"JobsDB: Invalid AI response for single select {i+1}")
+                        # Get radio input ID to find corresponding label
+                        radio_id = radio.get_attribute("id")
+                        if not radio_id:
                             continue
                         
-                        selected_option = ai_answer[0]  # Take first answer from list
-                        utils.printyellow(f"JobsDB: AI selected option: {selected_option}")
+                        # Find label for this radio button
+                        label = fieldset.find_element(By.CSS_SELECTOR, f"label[for='{radio_id}']")
+                        option_text = label.text.strip()
                         
-                        # 5. Select the corresponding radio button
-                        if selected_option in option_elements:
-                            radio_element = option_elements[selected_option]
-                            
-                            # Scroll to element and click
-                            self.driver.execute_script("arguments[0].scrollIntoView({block:'center'});", radio_element)
-                            time.sleep(0.2)
-                            
-                            # Click the radio button
-                            self._click_with_retry(radio_element)
-                            utils.printyellow(f"JobsDB: Successfully selected option {selected_option}: {options[selected_option]}")
-                            
-                        else:
-                            raise Exception(f"JobsDB: AI answer '{selected_option}' not found in available options")
+                        if option_text:
+                            option_key = chr(65 + j)  # A, B, C, D...
+                            options[option_key] = option_text
+                            option_elements[option_key] = radio
                             
                     except Exception as e:
-                        utils.printred(f"JobsDB: Error getting AI answer for single select {i+1}: {str(e)}")
+                        utils.printred(f"JobsDB: Error extracting option {j+1}: {str(e)}")
                         continue
+                
+                if not options:
+                    utils.printred(f"JobsDB: No valid options found for single select {i+1}")
+                    continue
+                
+                # 3. Prepare question for AI
+                ai_question = {
+                    "Question": question_text,
+                    "options": options
+                }
+                
+                utils.printyellow(f"JobsDB: Question: {question_text}")
+                utils.printyellow(f"JobsDB: Options: {options}")
+                
+                # 4. Ask AI for answer
+                try:
+                    ai_answer = self.gpt_answerer.standard_simplified_profile_chain(ai_question)
+                    
+                    selected_option = ai_answer[0]  # Take first answer from list
+                    utils.printyellow(f"JobsDB: AI selected option: {selected_option}")
+                    
+                    # 5. Select the corresponding radio button
+                    inrelation, selected_option = charIsIn(selected_option, option_elements.keys())
+                    if inrelation:
+                        radio_element = option_elements[selected_option]
+                        
+                        # Scroll to element and click
+                        self.driver.execute_script("arguments[0].scrollIntoView({block:'center'});", radio_element)
+                        time.sleep(0.2)
+                        
+                        # Click the radio button
+                        self._click_with_retry(radio_element)
+                        utils.printyellow(f"JobsDB: Successfully selected option {selected_option}: {options[selected_option]}")
+                        
+                    else:
+                        raise Exception(f"JobsDB: AI answer '{selected_option}' not found in available options")
                         
                 except Exception as e:
-                    utils.printred(f"JobsDB: Error processing single select problem {i+1}: {str(e)}")
+                    utils.printred(f"JobsDB: Error getting AI answer for single select {i+1}: {str(e)}")
                     continue
+                    
+            except Exception as e:
+                utils.printred(f"JobsDB: Error processing single select problem {i+1}: {str(e)}")
+                continue
+        
+        utils.printyellow("JobsDB: Finished processing all single select problems")
             
-            utils.printyellow("JobsDB: Finished processing all single select problems")
-            
-        except Exception as e:
-            utils.printred(f"JobsDB: Error in capture_single_select_problem: {str(e)}")
-            raise
 
     def capture_dropdown_problem(self, form: WebElement):
         """
@@ -637,15 +637,13 @@ class JobsDBEasyApplier(BaseEasyApplier):
                     # Ask AI for answer
                     try:
                         ai_answer = self.gpt_answerer.standard_simplified_profile_chain(ai_question)
-                        if not ai_answer or not isinstance(ai_answer, list) or len(ai_answer) == 0:
-                            utils.printred(f"JobsDB: Invalid AI response for dropdown {i+1}")
-                            continue
                             
                         selected_option = ai_answer[0]  # Take first answer from list
                         utils.printyellow(f"JobsDB: AI selected option: {selected_option}")
                         
                         # Select the corresponding option in dropdown
-                        if selected_option in option_values:
+                        inrelation, selected_option = charIsIn(selected_option, option_values.keys())
+                        if inrelation:
                             option_value = option_values[selected_option]
                             
                             # Scroll to select element
@@ -766,6 +764,9 @@ class JobsDBEasyApplier(BaseEasyApplier):
                 try:
                     ai_answer = self.gpt_answerer.standard_simplified_profile_chain(ai_question)
                     
+                    if not isinstance(ai_answer, list):
+                        utils.printred(f"JobsDB: AI answer format invalid for multi-select {i+1}")
+                        continue
                     utils.printyellow(f"JobsDB: AI selected options: {ai_answer}")
                     
                     # 5. Select/deselect the corresponding checkboxes

@@ -137,7 +137,18 @@ Question: {question}
 
 # Experience Details Template
 experience_details_template = """
-Not required to answer, read and understand as background information, even received question, do not answer based on this template.
+Answer the following question based on the provided experience details.
+
+## Rules
+- Select the question index and directly return index only.
+- This needs you judgement: If it seems likely that you have the experience, even if not explicitly defined, answer as if you have the experience.
+
+## Examples:
+My resume: multiple AI internships and deep research projects.
+Question: Do you have experience with Machine Learning?
+   A. Yes
+   B. No
+A
 
 Experience Details: {resume_section}
 Question: {question}
@@ -166,7 +177,7 @@ projects_template = """
 Answer the following question based on the provided project details.
 
 ## Rules
-- Answer questions directly.
+- Select the question index and directly return index only.
 - If it seems likely that you have the experience, even if not explicitly defined, answer as if you have the experience.
 - Keep the answer under 140 characters.
 

@@ -222,6 +222,7 @@ def main(resume: Path = None, platform: str = 'linkedin'):
         
         parameters = ConfigValidator.validate_config(config_file)
         email, password, openai_api_key = ConfigValidator.validate_secrets(secrets_file)
+        os.environ['XAI_API_KEY'] = openai_api_key
         
         parameters['uploads'] = FileManager.file_paths_to_dict(resume, plain_text_resume_file)
         parameters['outputFileDirectory'] = output_folder

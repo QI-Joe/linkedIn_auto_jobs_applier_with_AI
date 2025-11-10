@@ -3,12 +3,16 @@ from langchain_core.messages.ai import AIMessage
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompt_values import StringPromptValue
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_openai import ChatOpenAI
+from langchain_xai import ChatXAI
 import src.utils.strings as strings
 
 class SimplifedGPT:
-    def __init__(self, open_ai_key: str, model_name: str = "gpt-4o-mini", temperature: float = 0.4):
-        self.llm = ChatOpenAI(model=model_name, temperature=temperature, openai_api_key=open_ai_key)
+    def __init__(self, open_ai_key: str, model_name: str = "grok-3-mini", temperature: float = 0.4):
+        self.llm = ChatXAI(
+            model=model_name, 
+            temperature=temperature, 
+        )
+        
         self.model = LoggerChatModel(self.llm)
     
     def set_job_application_profile(self, job_application_profile):
@@ -67,6 +71,7 @@ class SimplifedGPT:
         chain = chains.get(section_name)
         if chain is None:
             raise ValueError(f"Chain not defined for section '{section_name}'")
+        ai_answer = chain.invoke({"resume_section": resume_section, "question": question})
         
-        return chain.invoke({"resume_section": resume_section, "question": question})
+        return ai_answer.split(",")
 
