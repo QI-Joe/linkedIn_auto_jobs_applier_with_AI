@@ -8,19 +8,21 @@ from selenium import webdriver
 from selenium.webdriver.chrome.service import Service as ChromeService
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.common.exceptions import WebDriverException, TimeoutException
-# from lib_resume_builder_AIHawk import Resume,StyleManager,FacadeManager,ResumeGenerator  # DISABLED: Resume generator
-from src.utils import chromeBrowserOptions
-from src.gpt import GPTAnswerer
-from src.linkedIn_authenticator import LinkedInAuthenticator
-from src.linkedIn_bot_facade import LinkedInBotFacade
-from src.linkedIn_job_manager import LinkedInJobManager
-from src.jobsdb_authenticator import JobsDBAuthenticator
-from src.jobsdb_bot_facade import JobsDBBotFacade
-from src.jobsdb_job_manager import JobsDBJobManager
-from src.job_application_profile import JobApplicationProfile
+from lib_resume_builder_AIHawk import Resume, StyleManager, FacadeManager, ResumeGenerator 
+from src.utils.utils import chromeBrowserOptions
+from src.utils.gpt import GPTAnswerer
+from src.linkedin.linkedIn_authenticator import LinkedInAuthenticator
+from src.linkedin.linkedIn_bot_facade import LinkedInBotFacade
+from src.linkedin.linkedIn_job_manager import LinkedInJobManager
+from src.jobsdb.jobsdb_authenticator import JobsDBAuthenticator
+from src.jobsdb.jobsdb_bot_facade import JobsDBBotFacade
+from src.jobsdb.jobsdb_job_manager import JobsDBJobManager
+from src.utils.job_application_profile import JobApplicationProfile
+from src.utils.simplifed_gpt import SimplifedGPT
+from src.utils.simplified_job_application_profile import SimplifiedJobApplicationProfile
 
-# Suppress stderr
-sys.stderr = open(os.devnull, 'w')
+# Suppress stderr - TEMPORARILY DISABLED FOR DEBUGGING
+# sys.stderr = open(os.devnull, 'w')
 
 class ConfigError(Exception):
     pass
@@ -163,21 +165,27 @@ def init_browser() -> webdriver.Chrome:
 
 def create_and_run_bot(email: str, password: str, parameters: dict, openai_api_key: str, platform: str = "linkedin"):
     try:
-        # DISABLED: Resume generator functionality
-        # style_manager = StyleManager()
-        # resume_generator = ResumeGenerator()
+        style_manager = StyleManager()
+        resume_generator = ResumeGenerator()
         with open(parameters['uploads']['plainTextResume'], "r", encoding='utf-8') as file:
             plain_text_resume = file.read()
-        # resume_object = Resume(plain_text_resume)
-        # resume_generator_manager = FacadeManager(openai_api_key, style_manager, resume_generator, resume_object, Path("data_folder/output"))
-        # os.system('cls' if os.name == 'nt' else 'clear')
-        # resume_generator_manager.choose_style()
-        # os.system('cls' if os.name == 'nt' else 'clear')
+        resume_object = Resume(plain_text_resume)
+        resume_generator_manager = FacadeManager(openai_api_key, style_manager, resume_generator, resume_object, Path("data_folder/output"))
+        os.system('cls' if os.name == 'nt' else 'clear')
+        resume_generator_manager.choose_style()
+        os.system('cls' if os.name == 'nt' else 'clear')
         
-        job_application_profile_object = JobApplicationProfile(plain_text_resume)
         
+        if platform.lower() == "jobsdb":
+            with open(r"./env/backup.yaml", "r", encoding='utf-8') as file:
+                plain_text_resume = file.read()
+            job_application_profile_object = SimplifiedJobApplicationProfile(plain_text_resume)
+            gpt_answerer_component = SimplifedGPT(openai_api_key)
+        else:
+            job_application_profile_object = JobApplicationProfile(plain_text_resume)
+            gpt_answerer_component = GPTAnswerer(openai_api_key)
+
         browser = init_browser()
-        gpt_answerer_component = GPTAnswerer(openai_api_key)
         
         # Create platform-specific components
         if platform.lower() == "jobsdb":
@@ -192,8 +200,8 @@ def create_and_run_bot(email: str, password: str, parameters: dict, openai_api_k
             print("Starting LinkedIn job application bot...")
         
         bot.set_secrets(email, password)
-        bot.set_job_application_profile_and_resume(job_application_profile_object, None)  # DISABLED: resume_object
-        bot.set_gpt_answerer_and_resume_generator(gpt_answerer_component, None)  # DISABLED: resume_generator_manager
+        bot.set_job_application_profile_and_resume(job_application_profile_object, resume_object)
+        bot.set_gpt_answerer_and_resume_generator(gpt_answerer_component, resume_generator_manager)
         bot.set_parameters(parameters)
         bot.start_login()
         bot.start_apply()
@@ -203,7 +211,7 @@ def create_and_run_bot(email: str, password: str, parameters: dict, openai_api_k
         raise RuntimeError(f"Error running the bot: {str(e)}")
 
 
-file_path: str = r"/mnt/d/StudyWork/Job Application/Qi Shihao.pdf"
+file_path: str = r"D:/StudyWork/Job Application/Qi Shihao.pdf"
 @click.command()
 @click.option('--resume', type=click.Path(exists=True, file_okay=True, dir_okay=False, path_type=Path), default=file_path, help="Path to the resume PDF file")
 @click.option('--platform', type=click.Choice(['linkedin', 'jobsdb'], case_sensitive=False), default='jobsdb', help="Platform to apply jobs on (linkedin or jobsdb)")
@@ -214,6 +222,7 @@ def main(resume: Path = None, platform: str = 'linkedin'):
         
         parameters = ConfigValidator.validate_config(config_file)
         email, password, openai_api_key = ConfigValidator.validate_secrets(secrets_file)
+        os.environ['XAI_API_KEY'] = openai_api_key
         
         parameters['uploads'] = FileManager.file_paths_to_dict(resume, plain_text_resume_file)
         parameters['outputFileDirectory'] = output_folder

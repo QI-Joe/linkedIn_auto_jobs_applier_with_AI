@@ -13,7 +13,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 from Levenshtein import distance
 
-import src.strings as strings
+import src.utils.strings as strings
 
 load_dotenv()
 
@@ -177,7 +177,6 @@ class GPTAnswerer:
             "certifications": self._create_chain(strings.certifications_template),
             "languages": self._create_chain(strings.languages_template),
             "interests": self._create_chain(strings.interests_template),
-            "cover_letter": self._create_chain(strings.coverletter_template),
         }
         section_prompt = """
         You are assisting a bot designed to automatically apply for jobs on LinkedIn. The bot receives various questions about job applications and needs to determine the most relevant section of the resume to provide an accurate response.
@@ -196,7 +195,6 @@ class GPTAnswerer:
         - Certifications
         - Languages
         - Interests
-        - Cover letter
 
         Here are detailed guidelines to help you choose the correct section:
 
@@ -260,11 +258,6 @@ class GPTAnswerer:
             - **Use When**: The question is about your hobbies, interests, or activities outside of work.
             - **Examples**: Personal hobbies, professional interests.
 
-        13. **Cover Letter**:
-            - **Purpose**: Contains your personalized cover letter or statement.
-            - **Use When**: The question involves your cover letter or specific written content intended for the job application.
-            - **Examples**: Cover letter content, personalized statements.
-
         Provide only the exact name of the section from the list above with no additional text.
         """
         prompt = ChatPromptTemplate.from_template(section_prompt)
@@ -325,3 +318,7 @@ class GPTAnswerer:
             return "cover"
         else:
             return "resume"
+
+    def ask_AI(self, question: str) -> List[str]:
+        print("GPTAnswerer: Asking AI question:\n", question)
+        return ["A"]
