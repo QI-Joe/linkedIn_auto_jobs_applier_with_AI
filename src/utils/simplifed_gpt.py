@@ -74,4 +74,52 @@ class SimplifedGPT:
         ai_answer = chain.invoke({"resume_section": resume_section, "question": question})
         
         return ai_answer.split(",")
+    
+    def job_info_parser(self, job_info):
+        """
+        job_info expected structure: {
+            "company": "Google Inc.",
+            "title": "Senior Software Engineer -- top-4 company (high salary)",
+            "detailed_page": "We are looking for an experienced software engineer..."
+        }
+        
+        Returns: {
+            "title": "Senior Software Engineer",
+            "detailed_page": "B"  # Index of selected document style
+        }
+        """
+        
+        # Create chains for the two tasks
+        job_title_chain = self._create_chain(strings.job_info)
+        document_selection_chain = self._create_chain(strings.document_selection)
+        
+        # Task 1: Job Title Correction
+        if "title" in job_info:
+            print(f"Correcting job title: {job_info['title']}")
+            corrected_title = job_title_chain.invoke({
+                "job_info": job_info["title"],
+                "options": ""  # Not used in job title correction
+            })
+            job_info["title"] = corrected_title.strip()
+            print(f"Corrected title: {job_info['title']}")
+
+        # Task 2: Document Selection
+        if "detailed_page" in job_info:
+            print(f"Selecting documents for job description...")
+            details: dict = job_info["detailed_page"]
+            intros = [key for key in details.keys() if key.startswith("intro")]
+            description = set(details.keys()) - set(intros)
+            
+            job_intro = "\n".join(list(details.values()))
+            if len(description):
+                job_intro = "\n".join([details[desc] for desc in description]) # for less token input, description contains words with desciptive titles, while intro most of time indicating company history, values etc. less useful info.
+            
+            selected_document = document_selection_chain.invoke({
+                "job_info": job_intro,
+                "options": strings.available_documents
+            })
+            job_info["selected_document"] = selected_document.strip()
+            print(f"Selected document style: {job_info['selected_document']}")
+
+        return job_info
 

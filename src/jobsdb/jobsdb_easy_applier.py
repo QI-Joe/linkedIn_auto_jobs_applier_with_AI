@@ -11,6 +11,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 import src.utils.utils as utils
 from src.base.base_easy_applier import BaseEasyApplier
 from src.utils.coverLetter import CoverLetterPDF
+import src.utils.strings as strings
 
 def charIsIn(receiver: str, examiner: list[str]):
     recvlist = receiver.split()
@@ -18,6 +19,8 @@ def charIsIn(receiver: str, examiner: list[str]):
         if token.strip().upper() in examiner:
             return True, token.upper()
     return False, None
+
+DOCUMENT_STYLE = strings.DOCUMENT_STYLE
 
 class JobsDBEasyApplier(BaseEasyApplier):
     """
@@ -285,7 +288,8 @@ class JobsDBEasyApplier(BaseEasyApplier):
             'company': '[data-automation="advertiser-name"]',
             'work_style': '[data-automation="job-detail-work-type"]',
             'salary': '[data-automation="job-detail-salary"]',
-            'link': self.driver.current_url
+            'link': self.driver.current_url,
+            'detailed_page': dict(),
         }
         
         # Extract title
@@ -297,7 +301,68 @@ class JobsDBEasyApplier(BaseEasyApplier):
             except Exception:
                 continue
         
+        info["detailed_page"] = self.sidebar_job_detail(sidebar)
+        
         return info
+
+    def _el_text(self, el: WebElement) -> str:
+        # More consistent text for lists: join <li> with newline
+        tag = el.tag_name.lower()
+        if tag == "ul" or tag == "ol":
+            lis = el.find_elements(By.XPATH, "./li")
+            return "\n".join(li.text.strip() for li in lis if li.text.strip())
+        return el.text.strip()
+
+    def sidebar_job_detail(self, sidebar: WebElement) -> dict:
+        """
+        Walk direct children (<p>, <ul>, etc.) of the job detail container.
+        Detect section titles as <p><strong>Title:</strong></p> and
+        collect subsequent siblings until the next title.
+        Returns:
+        - full_text: str
+        - sections: dict { title: "joined text" }
+        """
+        container: WebElement = sidebar.find_element(By.CSS_SELECTOR, 'div[data-automation="jobAdDetails"]')
+
+        # 2) Structured sections
+        sections = {}
+        current_title = None
+        buffer, intro_idx = [], 1
+
+        children = container.find_elements(By.XPATH, "./*")  # only direct children of the wrapper div
+        for child in children:
+            # Is this child a title paragraph? (contains a <strong> … >)
+            strongs = child.find_elements(By.XPATH, ".//strong[normalize-space()]")
+            if strongs:
+                # Flush previous section
+                if current_title and buffer:
+                    sections[current_title] = "\n".join(b for b in buffer if b)
+                buffer = []
+
+                # New title
+                title_raw = strongs[0].text.strip()
+                title = title_raw.rstrip(":：")  # normalize trailing colon
+                current_title = title
+                # If the title paragraph has more text after <strong>, capture it too
+                # (rare, but harmless)
+                remaining = child.text.replace(title_raw, "", 1).strip()
+                if remaining:
+                    buffer.append(remaining)
+            else:
+                # Not a title: content line for current section (or intro if no title yet)
+                txt = self._el_text(child)
+                if txt:
+                    if not current_title:
+                        current_title = "Intro" + str(intro_idx)
+                        intro_idx += 1
+                    buffer.append(txt)
+
+        # Flush last section
+        if current_title and buffer:
+            sections[current_title] = "\n".join(b for b in buffer if b)
+
+        return sections
+        
 
     def _should_apply_by_button_text(self, button_text: str) -> bool:
         """Decide whether to apply based on button text"""
@@ -323,10 +388,9 @@ class JobsDBEasyApplier(BaseEasyApplier):
                 new_window = list(new_windows)[0]
                 self.driver.switch_to.window(new_window)
             
-            self.cover_letter_operator.load_and_generate(
-                company_name=job_info['company'],
-                position_name=job_info['title']
-            )
+            job_info = self.gpt_answerer.job_info_parser(job_info)
+            
+            self.cover_letter_operator.load_and_generate(job_info=job_info)
             try:
                 # Add debugging info before upload
                 # utils.printyellow(f"JobsDB: Current URL before upload: {self.driver.current_url}")
@@ -336,10 +400,22 @@ class JobsDBEasyApplier(BaseEasyApplier):
                 # Wait a bit for page to fully load
                 time.sleep(2)
                 
-                self.cover_letter_upload()
+                self.document_page_control() # include resume select and cover letter selection
                 
                 time.sleep(random.uniform(1, 3))
-                self.fillin_form()
+                self.fillin_form()  # include personal information fill-in
+                
+                time.sleep(random.uniform(1, 4))
+                
+                self.press_continuous_button() # press continue button in fillin form page
+                
+                time.sleep(random.uniform(2,5))
+                
+                self.press_continuous_button() # press continue button in "Update Jobsdb Profile" page
+                
+                time.sleep(random.uniform(2,5))
+                
+                self.press_continuous_button(False, True) # press continue button in "Review and Submit" page
 
                 
                 utils.printyellow(f"JobsDB: Applied to {job_info['title']} at {job_info['company']}")
@@ -361,20 +437,49 @@ class JobsDBEasyApplier(BaseEasyApplier):
             utils.printred(f"JobsDB: Application failed: {str(e)}")
             return False
 
-    def cover_letter_upload(self):
-        """Upload cover letter to JobsDB application form"""
+    def document_page_control(self):
+        """
+        resume selection and cover letter upload
+        """
+        resume_upload={
+            "name": "resume",
+            "fieldset": "id^='resume-method-'",
+            "inputset": "resume-method-upload",
+            "input_click": "resume-fileFile"
+        }
+        coverletter_upload = {
+            "name": "coverLetter",
+            "fieldset": "id^='coverLetter-method-'",
+            "inputset": "coverLetter-method-upload",
+            "input_click": "coverLetter-fileFile"
+        }
+
+        self.info_upload(web_pattern=resume_upload)
+        self.info_upload(web_pattern=coverletter_upload)
+
+        btn = WebDriverWait(self.driver, 20).until(
+        EC.element_to_be_clickable((By.CSS_SELECTOR, "button[data-testid='continue-button']"))
+            )
+        # scroll into view (helps avoid intercepts)
+        self.driver.execute_script("arguments[0].scrollIntoView({block:'center'});", btn)
+        btn.click()
+        return True
+
+
+    def info_upload(self, web_pattern: dict):
+        """Upload document to JobsDB application form"""
         try:
-            utils.printyellow("JobsDB: Starting cover letter upload...")
+            utils.printyellow(f"JobsDB: Starting {web_pattern['name']} upload...")
             wait = WebDriverWait(self.driver, 20, poll_frequency=0.2)
 
             # 1) Wait for the radiogroup to be visible
             group = wait.until(
-                EC.visibility_of_element_located((By.CSS_SELECTOR, "fieldset[role='radiogroup'][id^='coverLetter-method-']"))
+                EC.visibility_of_element_located((By.CSS_SELECTOR, f"fieldset[role='radiogroup'][{web_pattern['fieldset']}]"))
             )
             utils.printyellow("JobsDB: Found radiogroup")
 
             # 2) Find the upload radio and its label - click the label, not the input
-            upload_radio = group.find_element(By.CSS_SELECTOR, "input[type='radio'][data-testid='coverLetter-method-upload']")
+            upload_radio = group.find_element(By.CSS_SELECTOR, f"input[type='radio'][data-testid={web_pattern['inputset']}]")
             radio_id = upload_radio.get_attribute("id")
             upload_label = group.find_element(By.CSS_SELECTOR, f"label[for='{radio_id}']")
             utils.printyellow(f"JobsDB: Found radio with ID: {radio_id}")
@@ -397,7 +502,7 @@ class JobsDBEasyApplier(BaseEasyApplier):
             utils.printyellow("JobsDB: Upload option selected")
 
             # 4) Find file input - it exists but is hidden
-            file_input = group.find_element(By.CSS_SELECTOR, "input#coverLetter-fileFile[data-testid='file-input'][type='file']")
+            file_input = group.find_element(By.CSS_SELECTOR, f"input#{web_pattern['input_click']}[data-testid='file-input'][type='file']")
             
             # 5) Make file input interactable (keep it off-screen but functional)
             self.driver.execute_script("""
@@ -414,24 +519,20 @@ class JobsDBEasyApplier(BaseEasyApplier):
             """, file_input)
             
             # 6) Upload file
-            cover_letter_path = self.cover_letter_operator.get_cover_letter_path()
-            if not cover_letter_path or not os.path.exists(cover_letter_path):
-                raise Exception("Cover letter file not found")
-                
-            file_input.send_keys(str(cover_letter_path))
-            utils.printyellow(f"JobsDB: Uploaded file: {cover_letter_path}")
-            
+            doc_path = self.cover_letter_operator.get_cover_letter_path()
+            if web_pattern['name'] == "resume":
+                doc_path = self.cover_letter_operator.get_resume_path()
+
+            if not doc_path or not os.path.exists(doc_path):
+                raise Exception(f"{web_pattern['name']} file not found")
+
+            file_input.send_keys(str(doc_path))
+            utils.printyellow(f"JobsDB | Uploaded {web_pattern['name']} file: {doc_path}")
+
             # 7) Verify upload by checking file input value
-            file_name = os.path.basename(cover_letter_path)
+            file_name = os.path.basename(doc_path)
             wait.until(lambda d: file_name.lower() in (file_input.get_attribute("value") or "").lower())
             utils.printyellow("JobsDB: Upload confirmed")
-            
-            btn = WebDriverWait(self.driver, 20).until(
-                EC.element_to_be_clickable((By.CSS_SELECTOR, "button[data-testid='continue-button']"))
-            )
-            # scroll into view (helps avoid intercepts)
-            self.driver.execute_script("arguments[0].scrollIntoView({block:'center'});", btn)
-            btn.click()
             
         except Exception as e:
             utils.printred(f"JobsDB: Cover letter upload failed: {str(e)}")
@@ -627,7 +728,7 @@ class JobsDBEasyApplier(BaseEasyApplier):
                     
                     # Prepare question for AI
                     ai_question = {
-                        "Question": question_text + " (Select multiple option)",
+                        "Question": question_text,
                         "options": options
                     }
                     
@@ -753,7 +854,7 @@ class JobsDBEasyApplier(BaseEasyApplier):
                 
                 # 3. Prepare question for AI
                 ai_question = {
-                    "Question": question_text,
+                    "Question": question_text + " (Select multiple option)",
                     "options": options
                 }
                 
@@ -795,7 +896,20 @@ class JobsDBEasyApplier(BaseEasyApplier):
         
         utils.printyellow("JobsDB: Finished processing all multi-select problems")
             
-            
+    def press_continuous_button(self, continuebutton: bool=True, reviewbutton: bool=False):
+        button: str = ''
+        
+        if continuebutton:
+            button='continue-button'
+        elif reviewbutton:
+            button='review-submit-application'
+        else:
+            raise Exception("Hey, button confiugration has problem")
+        wait = WebDriverWait(self.driver, 20)
+        btn: WebDriverWait = wait.until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, f"button[data-testid='{button}']"))
+        )
+        btn.click()
 
     def _discard_application(self) -> None:
         """Discard JobsDB application and return to job listing"""

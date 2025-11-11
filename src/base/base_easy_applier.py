@@ -15,6 +15,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import Select, WebDriverWait
 from selenium.webdriver import ActionChains
 import src.utils.utils as utils
+from src.utils.simplifed_gpt import SimplifedGPT
 
 
 class BaseEasyApplier(ABC):
@@ -29,7 +30,7 @@ class BaseEasyApplier(ABC):
         self.driver: WebDriver = driver
         self.resume_path = resume_dir
         self.set_old_answers = set_old_answers
-        self.gpt_answerer = gpt_answerer
+        self.gpt_answerer: SimplifedGPT = gpt_answerer
         self.resume_generator_manager = resume_generator_manager
         self.all_data = self._load_questions_from_json()
 

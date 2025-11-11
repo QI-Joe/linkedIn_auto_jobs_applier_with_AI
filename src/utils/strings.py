@@ -1,3 +1,61 @@
+DOCUMENT_STYLE = {
+    "A": ["Qi Shihao", "AI research"],
+    "B": ["Qi Shihao_Software_Engineer", "Software Engineer"],
+    "C": ["Qi Shihao", "Blockchain AI"],
+    "D": ["Qi Shihao", "Data Engineer"],
+    "E": ["Qi Shihao", "Fintech-AI research"],
+    "F": ["祁世豪-计算机系", "中文软件工程师"]
+}
+
+available_documents = "\n".join(
+      [f"{key}. {value[1]}" for key, value in DOCUMENT_STYLE.items()]
+)
+
+# job title correction
+job_info="""
+Extract and correct the job title from the given job position/title.
+
+## Rules
+- There are often irrelevant words/symbols in the job title, such as (high salary), --<top-4 company> or -- (AI education), etc. Remove these words and provide the corrected job title.
+
+## Example
+job title: Senior Software Engineer -- top-4 company (high salary)
+Senior Software Engineer
+
+job title: {job_info}
+
+## ignore below info
+Ignored data: {options}
+"""
+
+# document selection
+document_selection = """
+Select the appropriate category of documents (resume and cover letter) based on the provided job description.
+
+## Rules
+- Analyze the job description carefully to determine which documents are most relevant and fit for the application.
+- Select the question index and directly return index.
+
+## Example
+My job description: Looking for a software engineer with experience in AI and machine learning.
+Provided styles of documents:
+   A. AI Engineer
+   B. Software Engineer
+   C. Data Scientist
+B
+
+## Example 2
+My job description: 请提交关于AI工程师的中文简历和求职信。
+Provided styles of documents: (请直接选择中文文档，无论职位是否符合要求)
+   A. 软件工程师
+   B. Data Scientist
+   C. AI Engineer
+A
+
+Document selection: {job_info}
+available document styles: {options}
+"""
+
 # Personal Information Template
 personal_information_template = """
 Answer the following question based on the provided personal information.

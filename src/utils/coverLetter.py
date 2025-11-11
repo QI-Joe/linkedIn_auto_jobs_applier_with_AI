@@ -13,7 +13,7 @@ class CoverLetterPDF:
 
     def __init__(self):
         self.input_docx_folder = r"D:\StudyWork\Job Application"
-        self.job_type=r"A1-Cover Letter -- AI research.docx"
+        self.job_type=r"A1-Cover Letter -- <replace>.docx"
         self.out_dir=r"D:\StudyWork\Job Application\秋招"
 
     def word_replace_to_pdf_win(self, input_docx, replacements: dict, out_dir, target_name):
@@ -61,20 +61,27 @@ class CoverLetterPDF:
             json.dump(data, f, ensure_ascii=False, indent=4)
 
     # Example
-    def load_and_generate(self, company_name, position_name):
+    def load_and_generate(self, job_info: dict):
+        company_name, job_title, file_suffix = tuple(job_info.values())
+        resume, coverLetter = file_suffix
         loaded_history: dict = self.load_history()
         replacements = {
-            k: v for k, v in zip(list(loaded_history.values()), [company_name, position_name])
+            k: v for k, v in zip(list(loaded_history.values()), [company_name, job_title])
         }
         
-        input_docx = os.path.join(self.input_docx_folder, self.job_type)
+        input_docx = os.path.join(self.input_docx_folder, self.job_type.replace("<replace>", coverLetter))
         self.pdf = self.word_replace_to_pdf_win(
             input_docx=input_docx,
             replacements=replacements,
             out_dir=self.out_dir,
             target_name=f"Cover Letter {company_name}"
         )
-        print("Saved:", self.pdf)
+        self.resume_path = os.path.join(self.input_docx_folder, resume+".pdf")
+        
+        print(f"resume path: {self.resume_path} \ncover letter path: {self.pdf}")
     
     def get_cover_letter_path(self):
         return self.pdf
+    
+    def get_resume_path(self):
+        return self.resume_path
