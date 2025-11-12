@@ -17,6 +17,7 @@ Extract and correct the job title from the given job position/title.
 
 ## Rules
 - There are often irrelevant words/symbols in the job title, such as (high salary), --<top-4 company> or -- (AI education), etc. Remove these words and provide the corrected job title.
+- Direct output only the corrected job title, no additional explanation.
 
 ## Example
 job title: Senior Software Engineer -- top-4 company (high salary)

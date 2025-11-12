@@ -118,8 +118,8 @@ class SimplifedGPT:
                 "job_info": job_intro,
                 "options": strings.available_documents
             })
-            job_info["selected_document"] = selected_document.strip()
-            print(f"Selected document style: {job_info['selected_document']}")
+            job_info["selected_document_index"] = selected_document.strip()
+            print(f"Selected document index is: {job_info['selected_document_index']}")
 
         return job_info
 

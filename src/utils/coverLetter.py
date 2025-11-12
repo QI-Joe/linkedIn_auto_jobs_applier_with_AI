@@ -12,9 +12,9 @@ def open_with_default_app(path: Path):
 class CoverLetterPDF:
 
     def __init__(self):
-        self.input_docx_folder = r"D:\StudyWork\Job Application"
+        self.input_docx_folder = r"document_folder"
         self.job_type=r"A1-Cover Letter -- <replace>.docx"
-        self.out_dir=r"D:\StudyWork\Job Application\秋招"
+        self.out_dir=os.path.join(self.input_docx_folder, "submitted")
 
     def word_replace_to_pdf_win(self, input_docx, replacements: dict, out_dir, target_name):
         input_docx = Path(input_docx).resolve()
@@ -48,23 +48,23 @@ class CoverLetterPDF:
         # open_with_default_app(output_pdf)
         return output_pdf
 
-    def load_history(self):
-        recorded_last_job_name_path = r"./data_folder/cover_letter_last_job.json"
+    def load_history(self, selected_idx: int):
+        recorded_last_job_name_path = r"./env/cover_letter_last_job.json"
         load_data = dict()
         with open(recorded_last_job_name_path, "r", encoding="utf-8") as f:
-            load_data = json.load(f)
-        return load_data
+            load_data: dict = json.load(f)
+        return load_data.get(selected_idx)
 
     def instant_save(self, data: dict):
-        recorded_last_job_name_path = r"./data_folder/cover_letter_last_job.json"
+        recorded_last_job_name_path = r"./env/cover_letter_last_job.json"
         with open(recorded_last_job_name_path, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=4)
 
     # Example
     def load_and_generate(self, job_info: dict):
-        company_name, job_title, file_suffix = tuple(job_info.values())
+        company_name, job_title, file_suffix, selected_idx = job_info["company"], job_info["title"], job_info["selected_document"], job_info["selected_document_index"]
         resume, coverLetter = file_suffix
-        loaded_history: dict = self.load_history()
+        loaded_history: dict = self.load_history(selected_idx)
         replacements = {
             k: v for k, v in zip(list(loaded_history.values()), [company_name, job_title])
         }
@@ -76,7 +76,8 @@ class CoverLetterPDF:
             out_dir=self.out_dir,
             target_name=f"Cover Letter {company_name}"
         )
-        self.resume_path = os.path.join(self.input_docx_folder, resume+".pdf")
+        # Convert to absolute path for Selenium file upload
+        self.resume_path = os.path.abspath(os.path.join(self.input_docx_folder, resume+".pdf"))
         
         print(f"resume path: {self.resume_path} \ncover letter path: {self.pdf}")
     

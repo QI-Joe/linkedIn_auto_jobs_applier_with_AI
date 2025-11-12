@@ -12,6 +12,8 @@ import src.utils.utils as utils
 from src.base.base_easy_applier import BaseEasyApplier
 from src.utils.coverLetter import CoverLetterPDF
 import src.utils.strings as strings
+from collections import defaultdict
+import re
 
 def charIsIn(receiver: str, examiner: list[str]):
     recvlist = receiver.split()
@@ -389,6 +391,7 @@ class JobsDBEasyApplier(BaseEasyApplier):
                 self.driver.switch_to.window(new_window)
             
             job_info = self.gpt_answerer.job_info_parser(job_info)
+            job_info["selected_document"] = DOCUMENT_STYLE[job_info["selected_document_index"]]
             
             self.cover_letter_operator.load_and_generate(job_info=job_info)
             try:
@@ -403,11 +406,12 @@ class JobsDBEasyApplier(BaseEasyApplier):
                 self.document_page_control() # include resume select and cover letter selection
                 
                 time.sleep(random.uniform(1, 3))
-                self.fillin_form()  # include personal information fill-in
+                current_url = self.driver.current_url
+                if re.search(r'role-requirement?', str(current_url)):
+                    self.fillin_form()  # include personal information fill-in
                 
-                time.sleep(random.uniform(1, 4))
-                
-                self.press_continuous_button() # press continue button in fillin form page
+                    time.sleep(random.uniform(1, 4))
+                    self.press_continuous_button() # press continue button in fillin form page
                 
                 time.sleep(random.uniform(2,5))
                 
@@ -534,6 +538,8 @@ class JobsDBEasyApplier(BaseEasyApplier):
             wait.until(lambda d: file_name.lower() in (file_input.get_attribute("value") or "").lower())
             utils.printyellow("JobsDB: Upload confirmed")
             
+            time.sleep(random.uniform(1, 3))
+            
         except Exception as e:
             utils.printred(f"JobsDB: Cover letter upload failed: {str(e)}")
             raise Exception(f"Failed to upload cover letter: {str(e)}")
@@ -558,13 +564,13 @@ class JobsDBEasyApplier(BaseEasyApplier):
             # Process dropdown problems
             self.capture_dropdown_problem(form)
             time.sleep(random.uniform(1, 4))
-            self.capture_multi_select_problem(form)
+            self.capture_multi_select_problem()
             
             utils.printyellow("JobsDB: Form filling completed successfully")
             return True
             
         except Exception as e:
-            utils.printred(f"JobsDB: Form filling failed: {str(e)}")
+            utils.printred(f"JobsDB: Form filling failed or job not require side question answering: {str(e)}")
             raise
 
     def capture_single_select_problem(self, form: WebElement):
@@ -775,94 +781,143 @@ class JobsDBEasyApplier(BaseEasyApplier):
             utils.printred(f"JobsDB: Error in capture_dropdown_problem: {str(e)}")
             raise
 
-    def capture_multi_select_problem(self, form: WebElement):
+    def get_question_blocks(self, timeout=10):
         """
-        Capture and answer multi-select checkbox problems in JobsDB form
-        Based on markdown instructions: div class="_1m3jlfo0 _1tzn2gi5c _1tzn2gihk _1tzn2gi70" contains question and checkboxes
+        Robust method to extract all questionnaire questions (both checkbox and radio)
+        Returns structured data for both single-select and multi-select problems
         """
-        utils.printyellow("JobsDB: Processing multi-select problems...")
-        
-        # Find all multi-select problem sections using the specific hash class
-        multi_select_sections = form.find_elements(By.CSS_SELECTOR, "div._1m3jlfo0._1tzn2gi5c._1tzn2gihk._1tzn2gi70")
-        
-        if not multi_select_sections:
-            utils.printyellow("JobsDB: No multi-select problems found")
-            return
-        
-        utils.printyellow(f"JobsDB: Found {len(multi_select_sections)} multi-select problem(s)")
-        
-        for i, section in enumerate(multi_select_sections):
+        # Wait until at least one questionnaire input is present
+        WebDriverWait(self.driver, timeout).until(
+            EC.presence_of_element_located(
+                (By.XPATH, "//input[(self::input) and (@type='checkbox' or @type='radio') and starts-with(@name,'questionnaire.')]")
+            )
+        )
+
+        # 1) Collect all inputs belonging to any questionnaire question
+        inputs = self.driver.find_elements(
+            By.XPATH,
+            "//input[(self::input) and (@type='checkbox' or @type='radio') and starts-with(@name,'questionnaire.')]"
+        )
+
+        # 2) Group by the 'name' attribute (one question per distinct name)
+        grouped = defaultdict(list)
+        for inp in inputs:
+            grouped[inp.get_attribute("name")].append(inp)
+
+        questions = []
+
+        for name, inps in grouped.items():
+            # Representative input for locating the question prompt
+            rep = inps[0]
+
+            # 3) Find the closest ancestor DIV that contains a <strong> (the prompt lives there)
+            # Then take the first <strong> inside as the prompt text.
+            # This avoids brittle class selectors.
             try:
-                utils.printyellow(f"JobsDB: Processing multi-select problem {i+1}")
-                
-                # 1. Extract question text from div with specific class
-                question_text = ""
-                try:
-                    question_div = section.find_element(By.CSS_SELECTOR, "div._1m3jlfo0._1tzn2gi5c._1tzn2gihk._1tzn2gi6w._1tzn2giic")
-                    question_text = question_div.text.strip()
-                except:
-                    utils.printred(f"JobsDB: Could not find question text for multi-select {i+1}")
-                    continue
-                
-                if not question_text:
-                    utils.printred(f"JobsDB: Empty question text for multi-select {i+1}")
-                    continue
-                
-                # 2. Find all checkbox elements
-                checkbox_elements = section.find_elements(By.CSS_SELECTOR, "input[type='checkbox']")
-                
-                if not checkbox_elements:
-                    utils.printred(f"JobsDB: No checkbox options found for multi-select {i+1}")
-                    continue
-                
-                options = {}
-                option_elements = {}
-                key_index = 0
-                
-                for j, checkbox in enumerate(checkbox_elements):
+                prompt_el = rep.find_element(
+                    By.XPATH,
+                    "ancestor::div[.//strong][1]//strong[1]"
+                )
+                prompt = prompt_el.text.strip()
+            except Exception:
+                prompt = ""  # fallback if no strong is found
+
+            # 4) Build options: text via <label for=id>, selected via is_selected()
+            options = []
+            for inp in inps:
+                opt_id = inp.get_attribute("id")
+                # Find the label tied to this input
+                label_text = ""
+                if opt_id:
                     try:
-                        # Get checkbox ID to find corresponding label
-                        checkbox_id = checkbox.get_attribute("id")
-                        
-                        # Find label for this checkbox
-                        try:
-                            label = section.find_element(By.CSS_SELECTOR, f"label[for='{checkbox_id}']")
-                            option_text = label.text.strip()
-                        except:
-                            # If no label found, try to get text from parent or sibling elements
-                            try:
-                                option_text = checkbox.find_element(By.XPATH, "following-sibling::*[1]").text.strip()
-                            except:
-                                try:
-                                    option_text = checkbox.find_element(By.XPATH, "..").text.strip()
-                                except:
-                                    continue
-                        
-                        if option_text:
-                            option_key = chr(65 + key_index)  # A, B, C, D...
-                            options[option_key] = option_text
-                            option_elements[option_key] = checkbox
-                            key_index += 1
-                            
-                    except Exception as e:
-                        utils.printred(f"JobsDB: Error extracting checkbox option {j+1}: {str(e)}")
-                        continue
-                
-                if not options:
-                    utils.printred(f"JobsDB: No valid checkbox options found for multi-select {i+1}")
-                    continue
-                
-                # 3. Prepare question for AI
-                ai_question = {
-                    "Question": question_text + " (Select multiple option)",
-                    "options": options
-                }
-                
-                utils.printyellow(f"JobsDB: Question: {question_text}")
-                utils.printyellow(f"JobsDB: Options: {options}")
-                
-                # 4. Ask AI for answer
+                        label_el = self.driver.find_element(By.CSS_SELECTOR, f"label[for='{opt_id}']")
+                        label_text = label_el.text.strip()
+                    except Exception:
+                        pass
+                # Extra fallback: if label not found, try nearby text
+                if not label_text:
+                    try:
+                        label_text = inp.find_element(By.XPATH, "following::label[1]").text.strip()
+                    except Exception:
+                        label_text = ""
+
+                options.append({
+                    "value_id": opt_id,
+                    "text": label_text,
+                    "selected": inp.is_selected(),  # same as aria-checked == 'true' for checkboxes/radios
+                    "aria_checked": inp.get_attribute("aria-checked"),
+                    "type": inp.get_attribute("type"),
+                    "element": inp  # Keep reference to the element for clicking
+                })
+
+            questions.append({
+                "name": name,
+                "prompt": prompt,
+                "options": options
+            })
+
+        return questions
+
+    def capture_multi_select_problem(self):
+        """
+        Improved multi-select checkbox problem handler using robust question block extraction
+        Maintains compatibility with existing AI question format and data structures
+        """
+        print("JobsDB: Processing multi-select problems...")
+        
+        try:
+            # Use the robust method to get all question blocks
+            question_blocks = self.get_question_blocks()
+            
+            if not question_blocks:
+                print("JobsDB: No questionnaire problems found")
+                return
+            
+            # Filter for checkbox (multi-select) questions only
+            multi_select_questions = [q for q in question_blocks if any(opt["type"] == "checkbox" for opt in q["options"])]
+            
+            if not multi_select_questions:
+                print("JobsDB: No multi-select (checkbox) problems found")
+                return
+            
+            print(f"JobsDB: Found {len(multi_select_questions)} multi-select problem(s)")
+            
+            for i, question_block in enumerate(multi_select_questions):
                 try:
+                    print(f"JobsDB: Processing multi-select problem {i+1}")
+                    
+                    question_text = question_block["prompt"]
+                    
+                    if not question_text:
+                        print(f"JobsDB: Empty question text for multi-select {i+1}")
+                        continue
+                    
+                    # Convert to original format expected by AI
+                    options = {}
+                    option_elements = {}
+                    key_index = 0
+                    
+                    for option_data in question_block["options"]:
+                        if option_data["type"] == "checkbox" and option_data["text"]:
+                            option_key = chr(65 + key_index)  # A, B, C, D...
+                            options[option_key] = option_data["text"]
+                            option_elements[option_key] = option_data["element"]
+                            key_index += 1
+                    
+                    if not options:
+                        print(f"JobsDB: No valid checkbox options found for multi-select {i+1}")
+                        continue
+                    
+                    # 3. Prepare question for AI (maintaining original format)
+                    ai_question = {
+                        "Question": question_text,
+                        "options": options
+                    }
+                    
+                    print(f"JobsDB: Question: {question_text}")
+                    print(f"JobsDB: Options: {options}")
+                    
+                    # 4. Ask AI for answer
                     ai_answer = self.gpt_answerer.standard_simplified_profile_chain(ai_question)
                     
                     if not isinstance(ai_answer, list):
@@ -870,32 +925,37 @@ class JobsDBEasyApplier(BaseEasyApplier):
                         continue
                     utils.printyellow(f"JobsDB: AI selected options: {ai_answer}")
                     
+                    print(f"JobsDB: AI selected options: {ai_answer}")
+                    
                     # 5. Select/deselect the corresponding checkboxes
                     for option_key, checkbox_element in option_elements.items():
                         
                         is_selected = checkbox_element.is_selected() or checkbox_element.get_attribute("aria-checked") == "true"
+                        should_be_selected = option_key in ai_answer
                         
-                        # Scroll to element
-                        if (option_key in ai_answer and is_selected) or (option_key not in ai_answer and not is_selected):
-                            continue  # Already in desired state
-                        self.driver.execute_script("arguments[0].scrollIntoView({block:'center'});", checkbox_element)
-                        time.sleep(0.2)
+                        # Only click if state needs to change
+                        if is_selected != should_be_selected:
+                            # Scroll to element
+                            self.driver.execute_script("arguments[0].scrollIntoView({block:'center'});", checkbox_element)
+                            time.sleep(0.2)
+                            
+                            # Click the checkbox to change state
+                            self._click_with_retry(checkbox_element)
+                            print(f"JobsDB: {'Selected' if should_be_selected else 'Deselected'} option {option_key}: {options[option_key]}")
+                    
+                    print(f"JobsDB: Successfully processed multi-select problem {i+1}")
                         
-                        # Click the checkbox to change state
-                        self._click_with_retry(checkbox_element)
-                    
-                    utils.printyellow(f"JobsDB: Successfully processed multi-select problem {i+1}")
-                    
+                        
                 except Exception as e:
-                    utils.printred(f"JobsDB: Error getting AI answer for multi-select {i+1}: {str(e)}")
+                    print(f"JobsDB: Error processing multi-select problem {i+1}: {str(e)}")
                     continue
-                    
-            except Exception as e:
-                utils.printred(f"JobsDB: Error processing multi-select problem {i+1}: {str(e)}")
-                continue
-        
-        utils.printyellow("JobsDB: Finished processing all multi-select problems")
             
+            print("JobsDB: Finished processing all multi-select problems")
+            
+        except Exception as e:
+            print(f"JobsDB: Error in capture_multi_select_problem: {str(e)}")
+            raise
+  
     def press_continuous_button(self, continuebutton: bool=True, reviewbutton: bool=False):
         button: str = ''
         

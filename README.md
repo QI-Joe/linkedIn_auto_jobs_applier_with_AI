@@ -458,7 +458,7 @@ Each section has specific fields to fill out:
 
 ### PLUS. data_folder_example
 
-The `data_folder_example` folder contains a working example of how the files necessary for the bot's operation should be structured and filled out. This folder serves as a practical reference to help you correctly set up your work environment for the LinkedIn job search bot.
+The `e` folder contains a working example of how the files necessary for the bot's operation should be structured and filled out. This folder serves as a practical reference to help you correctly set up your work environment for the LinkedIn job search bot.
 
 #### Contents
 
