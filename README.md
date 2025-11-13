@@ -1,74 +1,249 @@
-<img src="./assets/linkedin_aihawk.png">
+<div align="center">
+  <img src="./assets/linkedin_aihawk.png" width="300" alt="Job Application Automation Tool">
+</div>
 
-<!-- At first glance, the branding and messaging clearly conveys what to expect -->
 <div align="center">
 
-[![LinkedIn](https://img.shields.io/badge/LinkedIn-0077B5?style=for-the-badge&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/federico-elia-5199951b6/)
-[![Gmail](https://img.shields.io/badge/Gmail-D14836?style=for-the-badge&logo=gmail&logoColor=white)](mailto:federico.elia.majo@gmail.com)
+[![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Version](https://img.shields.io/badge/Version-1.0-orange.svg)](CHANGELOG.md)
+[![Status](https://img.shields.io/badge/Status-Development-yellow.svg)](#roadmap)
 
-# LinkedIn_AIHawk
+# Multi-Platform Job Application Automation Tool
+#### 🤖 **Version 1.0** | Automate job applications across multiple platforms with AI-powered form filling
 
-#### 🤖🔍 Your AI-powered job search assistant. Automate applications, get personalized recommendations, and land your dream job faster.
+[![Telegram Community](https://img.shields.io/badge/Join-Telegram_Community-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white)](https://t.me/AIhawkCommunity)
 
 </div>
-<br />
 
-<!-- Message Clarity -->
-## 🚀 Join the AIHawk Community 🚀 
+---
 
-Connect with like-minded individuals and get the most out of AIHawk.
+## 📋 **Supported Platforms**
 
-💡 **Get support:** Ask questions, troubleshoot issues, and find solutions.
+| Platform | Status | Features |
+|----------|--------|----------|
+| 🟢 **JobsDB** | ✅ **Fully Supported** | Auto-apply, Form filling, Document upload |
+| 🟡 **LinkedIn** | ⚠️ **Under Development** | Status unknown due to recent code changes |
 
-🗣️ **Share knowledge:** Share your experiences, tips, and best practices.
+> **Note:** Currently, only JobsDB automation is fully functional and tested. LinkedIn support is being updated and will be available in the next release.
 
-🤝 **Network:** Connect with other professionals and explore new opportunities.
+---
 
-🔔 **Stay updated:** Get the latest news and updates on AIHawk.
+## 🧩 **Project Components**
 
-<!-- Strong Call to Action -->
-### Join Now 👇
-[![Telegram](https://img.shields.io/badge/Telegram-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white
-)](https://t.me/AIhawkCommunity)
+This tool consists of modular components designed for scalability and maintainability:
 
+| Component | Description | Status |
+|-----------|-------------|--------|
+| **🤖 Automation Engine** | Core job application automation across platforms | ✅ Active |
+| **📊 Logging System** | Multi-threaded JSON logging for application tracking | ✅ Active |
+| **🔮 AI Integration** | GPT-powered form filling and document selection | ✅ Active |
+| **📄 Document Management** | Dynamic resume/cover letter generation | ✅ Active |
 
+---
 
+## 📖 **Legacy Documentation**
 
-<!-- 🚀 **Join Our Telegram Community!** 🚀
+Looking for the original LinkedIn AIHawk documentation? 
+👉 **[View Original Documentation](docs/original_linkedin_aihawk_readme.md)**
 
-Join our **Telegram community** for:
-- **Support with AIHawk software**
-- **Share your experiences** with AIhawk and learn from others
-- **Job search tips** and **resume advice**
-- **Idea exchange** and resources for your projects
+The original comprehensive guide contains detailed setup instructions, troubleshooting, and feature explanations from the LinkedIn-focused version of this project.
 
-📲 **[Join now!](https://t.me/AIhawkCommunity)** -->
+---
 
-## Table of Contents
+## ⚙️ **Quick Setup Guide**
 
-1. [Introduction](#introduction)
-2. [Features](#features)
-3. [Installation](#installation)
-4. [Configuration](#configuration)
-5. [Usage](#usage)
-6. [Documentation](#Documentation)
-7. [Troubleshooting](#troubleshooting)
-8. [Conclusion](#conclusion)
-9. [Contributors](#contributors)
-10. [License](#license)
-11. [Disclaimer](#Disclaimer)
+### Prerequisites
+- **Python 3.9+** installed on your system
+- **Windows OS** (for Word document processing)
+- **Microsoft Word** (for cover letter generation)
+- **Google Chrome** browser
 
-## Introduction
+### Installation Steps
 
-LinkedIn_AIHawk is a cutting-edge, automated tool designed to revolutionize the job search and application process on LinkedIn. In today's fiercely competitive job market, where opportunities can vanish in the blink of an eye, this program offers job seekers a significant advantage. By leveraging the power of automation and artificial intelligence, LinkedIn_AIHawk enables users to apply to a vast number of relevant positions efficiently and in a personalized manner, maximizing their chances of landing their dream job.
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/feder-cr/linkedIn_auto_jobs_applier_with_AI.git
+   cd linkedIn_auto_jobs_applier_with_AI
+   ```
 
-### The Challenge of Modern Job Hunting
+2. **Create and activate virtual environment:**
+   ```bash
+   python -m venv venv
+   
+   # Windows
+   venv\Scripts\activate
+   
+   # Linux/Mac
+   source venv/bin/activate
+   ```
 
-In the digital age, the job search landscape has undergone a dramatic transformation. While online platforms like LinkedIn have opened up a world of opportunities, they have also intensified competition. Job seekers often find themselves spending countless hours scrolling through listings, tailoring applications, and repetitively filling out forms. This process can be not only time-consuming but also emotionally draining, leading to job search fatigue and missed opportunities.
+3. **Install required packages:**
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-### Enter LinkedIn_AIHawk: Your Personal Job Search Assistant
+### Required Configuration Files
 
-LinkedIn_AIHawk steps in as a game-changing solution to these challenges. It's not just a tool; it's your tireless, 24/7 job search partner. By automating the most time-consuming aspects of the job search process, it allows you to focus on what truly matters - preparing for interviews and developing your professional skills.
+Prepare these files in your data folder before running:
+
+| File | Purpose | Location |
+|------|---------|----------|
+| `secrets.yaml` | API keys and credentials | `data_folder/secrets.yaml` |
+| `config.yaml` | Job search parameters | `data_folder/config.yaml` |
+| `plain_text_resume.yaml` | Your resume data | `data_folder/plain_text_resume.yaml` |
+
+---
+
+## 📁 **Document Management Setup**
+
+### 1. Resume and Cover Letter Templates
+
+Create organized document templates in `document_folder/`:
+
+```
+document_folder/
+├── [Resume_Name].pdf              # Multiple resume variants
+├── A1-Cover Letter -- [Type].docx # Cover letter templates
+└── submitted/                     # Generated documents
+```
+
+### 2. Configure Document Types in `strings.py`
+
+Update the `DOCUMENT_STYLE` mapping in [`src/utils/strings.py`](src/utils/strings.py):
+
+```python
+DOCUMENT_STYLE = {
+    "A": ["Resume_Filename", "Document_Description"],
+    "B": ["Software_Engineer_Resume", "Software Engineer"],
+    "C": ["AI_Research_Resume", "AI Research Specialist"],
+    # Add more document types as needed
+}
+```
+
+### 3. Additional Required Files
+
+| File | Purpose | Example |
+|------|---------|---------|
+| `env/cover_letter_last_job.json` | Job history tracking | Auto-generated |
+| `logs/` directory | Application logs | Auto-created |
+
+---
+
+## 🚀 **Running the Application**
+
+### Basic Usage
+```bash
+python main.py --data_folder path/to/your/data_folder
+```
+
+### Available Options
+```bash
+# Run with specific resume
+python main.py --data_folder ./data --resume specific_resume.pdf
+
+# Run JobsDB automation (currently recommended)
+python main.py --data_folder ./data --platform jobsdb
+
+# View logs and results
+python main.py --data_folder ./data --view-logs
+```
+
+### Monitoring Results
+
+1. **Real-time Console Output**: Monitor application progress
+2. **JSON Logs**: Check `logs/job_applications_YYYYMMDD.jsonl` for detailed logs
+3. **Generated Documents**: Find personalized resumes/cover letters in `document_folder/submitted/`
+
+---
+
+## 🔧 **Environment Setup**
+
+### Virtual Environment (Recommended)
+
+Create an isolated Python environment:
+
+```bash
+# Create virtual environment
+python -m venv job_automation_env
+
+# Activate (Windows)
+job_automation_env\Scripts\activate
+
+# Activate (Linux/Mac)  
+source job_automation_env/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Verify installation
+python -c "import selenium, langchain_openai; print('Dependencies installed successfully!')"
+```
+
+### Required Environment Variables
+
+Create `.env` file (optional):
+```bash
+OPENAI_API_KEY=your_openai_api_key
+LOG_LEVEL=INFO
+CHROME_DRIVER_PATH=auto  # Auto-download ChromeDriver
+```
+
+---
+
+## 📊 **Roadmap & Future Updates**
+
+### 🎯 **Current Focus (v1.0)**
+- ✅ JobsDB automation fully functional
+- ✅ Multi-threaded logging system
+- ✅ AI-powered form filling
+- ✅ Document management system
+
+### 🔮 **Coming Soon (v1.1)**
+- 🔄 **LinkedIn Support Restoration** - Updated automation for LinkedIn platform
+- 🎨 **Web Frontend Dashboard** - Beautiful interface for result viewing and management
+- 🔔 **Smart Job Recommendations** - AI-powered job matching and priority notifications
+- 📈 **Advanced Analytics** - Success rate tracking and optimization suggestions
+
+### 🌟 **Future Vision (v2.0+)**
+- Multi-platform expansion (Indeed, Glassdoor, etc.)
+- Machine learning for application optimization
+- Integration with calendar and interview scheduling
+- Mobile app companion
+
+---
+
+## 🙏 **Acknowledgments**
+
+Special thanks to:
+- **Original AIHawk Community** for the foundation and inspiration
+- **Contributors** who helped evolve this project from LinkedIn-only to multi-platform
+- **Open Source Libraries** that make this automation possible
+- **Beta Testers** providing valuable feedback on JobsDB automation
+
+---
+
+## 📞 **Support & Community**
+
+- **🐛 Issues & Bugs**: [GitHub Issues](https://github.com/feder-cr/linkedIn_auto_jobs_applier_with_AI/issues)
+- **💬 Community Support**: [Telegram Group](https://t.me/AIhawkCommunity)
+- **📖 Documentation**: [Docs Folder](docs/)
+- **🎥 Video Tutorials**: [Setup Guide](https://youtu.be/gdW9wogHEUM)
+
+---
+
+<div align="center">
+  <sub>Built with ❤️ for job seekers worldwide | Star ⭐ this repo if it helps you land your dream job!</sub>
+</div>
+
+---
+
+## 📖 **Legacy Documentation**
+
+Looking for the original LinkedIn AIHawk documentation? 
+👉 **[View Original Documentation](docs/original_linkedin_aihawk_readme.md)**
+
+The original comprehensive guide contains detailed setup instructions, troubleshooting, and feature explanations from the LinkedIn-focused version of this project.
 
 ## Features
 
