@@ -14,6 +14,7 @@ from src.utils.coverLetter import CoverLetterPDF
 import src.utils.strings as strings
 from collections import defaultdict
 import re
+from src.logging.logbase import logBase
 
 def charIsIn(receiver: str, examiner: list[str]):
     recvlist = receiver.split()
@@ -23,6 +24,7 @@ def charIsIn(receiver: str, examiner: list[str]):
     return False, None
 
 DOCUMENT_STYLE = strings.DOCUMENT_STYLE
+LOG_PATH = "logs"
 
 class JobsDBEasyApplier(BaseEasyApplier):
     """
@@ -34,6 +36,8 @@ class JobsDBEasyApplier(BaseEasyApplier):
         super().__init__(driver, resume_dir, set_old_answers, gpt_answerer, resume_generator_manager)
         self.base_url = "https://hk.jobsdb.com"
         self.cover_letter_operator = CoverLetterPDF()
+        self.logging_system: logBase = logBase(LOG_PATH)
+        self.logging_system.start()
 
     def get_job_search_url(self):
         self.job_title, self.job_posting_date_range = "ai-engineer-jobs", 14
@@ -112,6 +116,7 @@ class JobsDBEasyApplier(BaseEasyApplier):
                 utils.printyellow("JobsDB: No new jobs found, iteration complete")
                 break
         
+        self.logging_system.stop() # place need to change, class should initalized in main.py
         utils.printyellow(f"JobsDB: Iteration complete, processed {len(seen_job_ids)} total jobs")
 
     def job_apply(self, job: Any):
@@ -200,6 +205,9 @@ class JobsDBEasyApplier(BaseEasyApplier):
             
             button_text = apply_button.text.strip()
             utils.printyellow(f"JobsDB: Found apply button: {button_text}")
+            job_info["apply_button_type"] = button_text
+            job_info["platform"] = "JobsDB"
+            job_info["applied"] = False
             
             if jumped:
                 """
@@ -209,10 +217,15 @@ class JobsDBEasyApplier(BaseEasyApplier):
                 new_windows, job_list_search_archive_windows = job_list_search_archive_windows, self.get_job_search_url()
             
             if self._should_apply_by_button_text(button_text):
-                return self._handle_job_application(apply_button, job_info, [new_windows], job_list_search_archive_windows)
+                status = self._handle_job_application(apply_button, job_info, [new_windows], job_list_search_archive_windows)
+                job_info["applied"] = status
+
+                self.logging_system.add_log_job(job_info)
+                return status
             else:
                 utils.printyellow(f"JobsDB: Skipping - button type: {button_text}")
-                
+
+            self.logging_system.add_log_job(job_info)
             return False
             
         except Exception as e:
@@ -395,12 +408,6 @@ class JobsDBEasyApplier(BaseEasyApplier):
             
             self.cover_letter_operator.load_and_generate(job_info=job_info)
             try:
-                # Add debugging info before upload
-                # utils.printyellow(f"JobsDB: Current URL before upload: {self.driver.current_url}")
-                # utils.printyellow(f"JobsDB: Number of windows: {len(self.driver.window_handles)}")
-                # utils.printyellow(f"JobsDB: Current window handle: {self.driver.current_window_handle}")
-                
-                # Wait a bit for page to fully load
                 time.sleep(2)
                 
                 self.document_page_control() # include resume select and cover letter selection
