@@ -7,7 +7,7 @@ from datetime import datetime
 # I would like to consider entire logBase task is in antoher thread to run
 class logBase(threading.Thread):
     def __init__(self, log_path: str):
-        super(self, logBase).__init__()
+        super(logBase, self).__init__()
         self.job_queue = queue.Queue(maxsize=16)
         self.log_path = log_path
         self._stop_event = threading.Event()
@@ -28,10 +28,19 @@ class logBase(threading.Thread):
         """Process and store a log job in json format
         expected keys in job: [timestamp in Y-M-D, job_info, submitted, button_type]
         """
+
+        if not os.path.exists(self.log_path):
+            os.makedirs(self.log_path, exist_ok=True)
+        
+        # Construct the file path after ensuring directory exists
         storage_path = os.path.join(self.log_path, f"{job['timestamp']}_log.json")
-        with open(storage_path, 'a') as f:
-            json.dump(job, f)
-            f.write('\n')  # Newline for each log entry
+        
+        # Use JSONL format (JSON Lines) for proper append functionality
+        # Each line is a valid JSON object, making it easy to read line by line
+        with open(storage_path, 'a', encoding='utf-8') as f:
+            json.dump(job, f, ensure_ascii=False, indent=2)
+            f.write('\n')  # Newline for each log entry (JSONL format)
+                
         return 
 
     def add_log_job(self, job: dict):

@@ -24,7 +24,7 @@ def charIsIn(receiver: str, examiner: list[str]):
     return False, None
 
 DOCUMENT_STYLE = strings.DOCUMENT_STYLE
-LOG_PATH = "logs"
+LOG_PATH = "job_apply_logs"
 
 class JobsDBEasyApplier(BaseEasyApplier):
     """
@@ -467,6 +467,8 @@ class JobsDBEasyApplier(BaseEasyApplier):
 
         self.info_upload(web_pattern=resume_upload)
         self.info_upload(web_pattern=coverletter_upload)
+        
+        time.sleep(random.uniform(3,5))
 
         btn = WebDriverWait(self.driver, 20).until(
         EC.element_to_be_clickable((By.CSS_SELECTOR, "button[data-testid='continue-button']"))
@@ -565,13 +567,16 @@ class JobsDBEasyApplier(BaseEasyApplier):
             utils.printyellow("JobsDB: Form loaded successfully")
             
             # Process single select problems (radio buttons)
-            self.capture_single_select_problem(form)
-            
-            time.sleep(random.uniform(1, 4))
-            # Process dropdown problems
-            self.capture_dropdown_problem(form)
-            time.sleep(random.uniform(1, 4))
-            self.capture_multi_select_problem()
+            try: 
+                self.capture_single_select_problem(form)
+                
+                time.sleep(random.uniform(1, 4))
+                # Process dropdown problems
+                self.capture_dropdown_problem(form)
+                time.sleep(random.uniform(1, 4))
+                self.capture_multi_select_problem()
+            except Exception as e:
+                utils.printred(f"JobsDB: Seems part of question isnt asked, Error processing form problems: {str(e)}")
             
             utils.printyellow("JobsDB: Form filling completed successfully")
             return True
