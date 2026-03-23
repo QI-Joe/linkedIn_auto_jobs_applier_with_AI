@@ -844,6 +844,7 @@ class JobsDBEasyApplier(BaseEasyApplier):
                 opt_id = inp.get_attribute("id")
                 # Find the label tied to this input
                 label_text = ""
+                label_el = None
                 if opt_id:
                     try:
                         label_el = self.driver.find_element(By.CSS_SELECTOR, f"label[for='{opt_id}']")
@@ -863,7 +864,8 @@ class JobsDBEasyApplier(BaseEasyApplier):
                     "selected": inp.is_selected(),  # same as aria-checked == 'true' for checkboxes/radios
                     "aria_checked": inp.get_attribute("aria-checked"),
                     "type": inp.get_attribute("type"),
-                    "element": inp  # Keep reference to the element for clicking
+                    "element": inp,  # Keep reference to the input element
+                    "label_element": label_el
                 })
 
             questions.append({
@@ -911,6 +913,7 @@ class JobsDBEasyApplier(BaseEasyApplier):
                     # Convert to original format expected by AI
                     options = {}
                     option_elements = {}
+                    option_label_elements = {}
                     key_index = 0
                     
                     for option_data in question_block["options"]:
@@ -918,6 +921,7 @@ class JobsDBEasyApplier(BaseEasyApplier):
                             option_key = chr(65 + key_index)  # A, B, C, D...
                             options[option_key] = option_data["text"]
                             option_elements[option_key] = option_data["element"]
+                            option_label_elements[option_key] = option_data.get("label_element")
                             key_index += 1
                     
                     if not options:
@@ -935,29 +939,61 @@ class JobsDBEasyApplier(BaseEasyApplier):
                     
                     # 4. Ask AI for answer
                     ai_answer = self.gpt_answerer.standard_simplified_profile_chain(ai_question)
-                    
                     if not isinstance(ai_answer, list):
-                        utils.printred(f"JobsDB: AI answer format invalid for multi-select {i+1}")
-                        continue
-                    utils.printyellow(f"JobsDB: AI selected options: {ai_answer}")
+                        ai_answer = [str(ai_answer)]
+
+                    normalized_answer_keys = set()
+                    for raw_answer in ai_answer:
+                        if raw_answer is None:
+                            continue
+                        answer_text = str(raw_answer).strip().upper()
+                        if not answer_text:
+                            continue
+
+                        # Match single-letter options like A/B/C.
+                        for token in re.findall(r"\b[A-Z]\b", answer_text):
+                            if token in options:
+                                normalized_answer_keys.add(token)
+
+                        # Match exact option text as fallback.
+                        for option_key, option_text in options.items():
+                            if option_text.strip().upper() == answer_text:
+                                normalized_answer_keys.add(option_key)
+
+                    utils.printyellow(f"JobsDB: AI selected options(raw): {ai_answer}")
+                    utils.printyellow(f"JobsDB: AI selected options(normalized): {sorted(normalized_answer_keys)}")
                     
-                    print(f"JobsDB: AI selected options: {ai_answer}")
-                    
-                    # 5. Select/deselect the corresponding checkboxes
+                    # 5. Select only required checkboxes.
+                    # JobsDB may remember previous answers, so avoid toggling
+                    # already selected options and avoid deselecting by click.
                     for option_key, checkbox_element in option_elements.items():
-                        
-                        is_selected = checkbox_element.is_selected() or checkbox_element.get_attribute("aria-checked") == "true"
-                        should_be_selected = option_key in ai_answer
-                        
-                        # Only click if state needs to change
-                        if is_selected != should_be_selected:
+                        aria_checked = (checkbox_element.get_attribute("aria-checked") or "").strip().lower()
+                        is_selected = aria_checked == "true"
+                        should_be_selected = option_key in normalized_answer_keys
+
+                        # Only click when this option should be selected but is not selected yet.
+                        if should_be_selected and not is_selected:
                             # Scroll to element
                             self.driver.execute_script("arguments[0].scrollIntoView({block:'center'});", checkbox_element)
                             time.sleep(0.2)
                             
-                            # Click the checkbox to change state
+                            # First try clicking the input element.
                             self._click_with_retry(checkbox_element)
-                            print(f"JobsDB: {'Selected' if should_be_selected else 'Deselected'} option {option_key}: {options[option_key]}")
+                            time.sleep(0.2)
+
+                            # Verify using aria-checked; fallback to label click if needed.
+                            after_click = (checkbox_element.get_attribute("aria-checked") or "").strip().lower() == "true"
+                            if not after_click:
+                                label_el = option_label_elements.get(option_key)
+                                if label_el is not None:
+                                    self._click_with_retry(label_el)
+                                    time.sleep(0.2)
+                                    after_click = (checkbox_element.get_attribute("aria-checked") or "").strip().lower() == "true"
+
+                            if after_click:
+                                print(f"JobsDB: Selected option {option_key}: {options[option_key]}")
+                            else:
+                                utils.printred(f"JobsDB: Failed to select option {option_key}: {options[option_key]}")
                     
                     print(f"JobsDB: Successfully processed multi-select problem {i+1}")
                         
