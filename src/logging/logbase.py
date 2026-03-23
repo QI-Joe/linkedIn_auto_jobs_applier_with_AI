@@ -34,14 +34,60 @@ class logBase(threading.Thread):
         
         # Construct the file path after ensuring directory exists
         storage_path = os.path.join(self.log_path, f"{job['timestamp']}_log.json")
-        
-        # Use JSONL format (JSON Lines) for proper append functionality
-        # Each line is a valid JSON object, making it easy to read line by line
-        with open(storage_path, 'a', encoding='utf-8') as f:
-            json.dump(job, f, ensure_ascii=False, indent=2)
-            f.write('\n')  # Newline for each log entry (JSONL format)
+
+        records = self._load_existing_records(storage_path)
+        records.append(job)
+
+        with open(storage_path, 'w', encoding='utf-8') as f:
+            json.dump(records, f, ensure_ascii=False, indent=2)
                 
         return 
+
+    def _load_existing_records(self, storage_path: str) -> list[dict]:
+        """
+        Load existing records from a daily file.
+        Supports:
+        1) Standard JSON array (preferred format)
+        2) Legacy concatenated JSON objects (best-effort migration)
+        """
+        if not os.path.exists(storage_path):
+            return []
+
+        with open(storage_path, 'r', encoding='utf-8') as f:
+            raw = f.read().strip()
+
+        if not raw:
+            return []
+
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, list):
+                return parsed
+            if isinstance(parsed, dict):
+                return [parsed]
+            return []
+        except json.JSONDecodeError:
+            pass
+
+        decoder = json.JSONDecoder()
+        idx = 0
+        size = len(raw)
+        records: list[dict] = []
+
+        while idx < size:
+            while idx < size and raw[idx].isspace():
+                idx += 1
+            if idx >= size:
+                break
+            try:
+                obj, next_idx = decoder.raw_decode(raw, idx)
+                if isinstance(obj, dict):
+                    records.append(obj)
+                idx = next_idx
+            except json.JSONDecodeError:
+                break
+
+        return records
 
     def add_log_job(self, job: dict):
 

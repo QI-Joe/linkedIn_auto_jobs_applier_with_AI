@@ -201,6 +201,7 @@ Answer the following question based on the provided experience details.
 ## Rules
 - Select the question index and directly return index only.
 - This needs you judgement: If it seems likely that you have the experience, even if not explicitly defined, answer as if you have the experience.
+- If given option is more than 2, dont select 'no experience' option, just select the most relevant experience option.
 
 ## Examples:
 My resume: multiple AI internships and deep research projects.
@@ -208,6 +209,14 @@ Question: Do you have experience with Machine Learning?
    A. Yes
    B. No
 A
+
+My resume: no AI internships and deep research projects.
+Question: How many years of experience with Machine Learning?
+   A. No experience
+   B. less than 1 year
+   C. 1-2 years
+   D. more than 2 years
+B
 
 Experience Details: {resume_section}
 Question: {question}

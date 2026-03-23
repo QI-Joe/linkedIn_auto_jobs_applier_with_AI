@@ -15,6 +15,7 @@ import src.utils.strings as strings
 from collections import defaultdict
 import re
 from src.logging.logbase import logBase
+from src.jobsdb.front_fetch.next_card_page import click_next_page
 
 def charIsIn(receiver: str, examiner: list[str]):
     recvlist = receiver.split()
@@ -70,18 +71,18 @@ class JobsDBEasyApplier(BaseEasyApplier):
     def iterate_and_apply_jobs(self):
         """Main method: iterate through all job cards on current page and apply"""
         seen_job_ids = set()
-        max_iterations = 50
+        max_application = 50
         
         utils.printyellow("JobsDB: Starting job card iteration...")
         
         job_list_url = self.get_job_search_url()
         self.driver.get(job_list_url)
         
-        for iteration in range(max_iterations):
+        while len(seen_job_ids) < max_application:
             job_cards = self._get_all_job_cards()
             current_count = len(job_cards)
             
-            utils.printyellow(f"JobsDB: Iteration {iteration+1}, found {current_count} job cards")
+            utils.printyellow(f"JobsDB: found {current_count} job cards")
             
             new_jobs_processed = 0
             for card_index in range(len(job_cards)):
@@ -114,6 +115,9 @@ class JobsDBEasyApplier(BaseEasyApplier):
             # If no new jobs found, stop
             if new_jobs_processed == 0:
                 utils.printyellow("JobsDB: No new jobs found, iteration complete")
+                break
+            if not click_next_page(self.driver, self.logging_system):
+                utils.printyellow("JobsDB: No next page available, stopping")
                 break
         
         self.logging_system.stop() # place need to change, class should initalized in main.py
