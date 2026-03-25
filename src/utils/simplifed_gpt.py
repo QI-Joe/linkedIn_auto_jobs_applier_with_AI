@@ -6,6 +6,11 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_xai import ChatXAI
 import src.utils.strings as strings
 
+
+COMPANY_BLACKLIST = ["TCL"]
+JOB_TITLE_BLACKLIST = ["solution enginner", "manager"]
+THRESHOLD = 6
+
 class SimplifedGPT:
     def __init__(self, open_ai_key: str, model_name: str = "grok-3-mini", temperature: float = 0.4):
         self.llm = ChatXAI(
@@ -123,3 +128,21 @@ class SimplifedGPT:
 
         return job_info
 
+    def _decide_apply_strategy(self, job_info) -> bool:
+        """
+        Decide whether to apply for the job based on the job information. LLM should return a str of int value from 1 to 10,
+        and now decide when int large than 6, we will apply for the job, otherwise skip.
+        """
+        apply_decision_chain = self._create_chain(strings.apply_decision_template)
+        decision = apply_decision_chain.invoke({
+            "job_title": job_info["title"],
+            "job_description": job_info["detailed_page"],
+            "company_black_list": ", ".join(COMPANY_BLACKLIST),
+            "job_title_black_list": ", ".join(JOB_TITLE_BLACKLIST)
+        })
+        
+        score = int(decision.strip())
+        print(f"Apply decision score: {score}")
+        job_info['apply_decision_score'] = decision.strip()
+        job_info['apply_decision'] = score >= THRESHOLD
+        return job_info

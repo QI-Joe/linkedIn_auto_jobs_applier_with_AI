@@ -11,6 +11,31 @@ available_documents = "\n".join(
       [f"{key}. {value[1]}" for key, value in DOCUMENT_STYLE.items()]
 )
 
+apply_decision_template = """
+Decide whether to apply for the job based on the provided job information. Return a score from 1 to 10, where 1 means not suitable and 10 means highly suitable.
+
+## Rules
+- Consider about job description, job title and salary (if available) to make the decision.
+- For job title, my experience more match about AI developer role and software engineer role, and you should avoid given comapny black list {company_black_list}. 
+- For job title, given {job_title_black_list} list and if title has senior, the score of these jobs should not higher than 7. 
+- For AI developer role, I more intend to enginnering role on both AI research and software development. But for some consultant, architecture, and solution enginner jobs, give relative low score.
+- You can direct rely on job title {job_title} to make decision. 
+- For job desciription {job_description}, you can analyze it shows more technique part on AI research and software enginner. Like embedding tech, AI or software development framework, etc. Or it shows more about solution, architecture, or consulting job. If the job description is more about the former part, give higher score, otherwise give lower score.
+- High score should above at least 6, low score should be below 6. Or at least, make sure worth one distinct, significant.
+- Attention, only return the score !
+
+## Example:
+job title: Senior Software Engineer
+job description: Looking for a software engineer with experience in AI and machine learning.
+8
+
+
+job title: AI Solution Architect
+job description: Looking for a solution architect to design AI system for clients.
+4
+
+"""
+
 # job title correction
 job_info="""
 Extract and correct the job title from the given job position/title.

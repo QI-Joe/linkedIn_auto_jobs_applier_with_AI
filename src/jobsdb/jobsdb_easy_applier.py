@@ -211,7 +211,8 @@ class JobsDBEasyApplier(BaseEasyApplier):
             utils.printyellow(f"JobsDB: Found apply button: {button_text}")
             job_info["apply_button_type"] = button_text
             job_info["platform"] = "JobsDB"
-            job_info["applied"] = False
+            job_info["applied"], status = False, False
+            job_info = self.gpt_answerer._decide_apply_strategy(job_info)
             
             if jumped:
                 """
@@ -221,7 +222,8 @@ class JobsDBEasyApplier(BaseEasyApplier):
                 new_windows, job_list_search_archive_windows = job_list_search_archive_windows, self.get_job_search_url()
             
             if self._should_apply_by_button_text(button_text):
-                status = self._handle_job_application(apply_button, job_info, [new_windows], job_list_search_archive_windows)
+                if job_info["apply_decision"]:
+                    status = self._handle_job_application(apply_button, job_info, [new_windows], job_list_search_archive_windows)
                 job_info["applied"] = status
 
                 self.logging_system.add_log_job(job_info)
