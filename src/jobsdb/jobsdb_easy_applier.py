@@ -41,8 +41,12 @@ class JobsDBEasyApplier(BaseEasyApplier):
         self.logging_system.start()
 
     def get_job_search_url(self):
-        self.job_title, self.job_posting_date_range = "ai-engineer-jobs", 14
-        target_url=f"{self.base_url}/{self.job_title}?daterange={self.job_posting_date_range}"
+        self.job_title, self.job_posting_date_range = "ai-engineer-jobs", 7
+        workarrangement, worktype = "1%2C2", "242%2C244"
+        
+        # Added &workarrangement={workarrangement}&worktype={worktype} to the f-string
+        target_url = f"{self.base_url}/{self.job_title}?daterange={self.job_posting_date_range}&workarrangement={workarrangement}&worktype={worktype}"
+        
         return target_url
     
     def get_platform_selectors(self):
@@ -431,10 +435,21 @@ class JobsDBEasyApplier(BaseEasyApplier):
                 self.press_continuous_button() # press continue button in "Update Jobsdb Profile" page
                 
                 time.sleep(random.uniform(2,5))
-                
+
+                url_before_submit = self.driver.current_url
                 self.press_continuous_button(False, True) # press continue button in "Review and Submit" page
 
-                
+                # Wait for the success/confirmation page to load before closing
+                try:
+                    WebDriverWait(self.driver, 15).until(
+                        lambda d: d.current_url != url_before_submit
+                    )
+                    utils.printyellow(f"JobsDB: Submission confirmed, landed on: {self.driver.current_url}")
+                except TimeoutException:
+                    # URL didn't change; still give extra time for any in-page confirmation
+                    utils.printyellow("JobsDB: URL did not change after submit, waiting extra time...")
+                    time.sleep(3)
+
                 utils.printyellow(f"JobsDB: Applied to {job_info['title']} at {job_info['company']}")
                 return True
                 

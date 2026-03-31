@@ -161,13 +161,43 @@ class CoverLetterPDF:
 
         return replacements
 
+    def _resolve_cover_letter_template_path(self, cover_letter_ref: str) -> str:
+        """
+        Resolve cover letter template path from either:
+        1) a short label (e.g. "Software Engineer"), or
+        2) a full filename (e.g. "Cover Letter -- AI Engineer CN.docx").
+        """
+        base_dir = os.path.abspath(self.input_docx_folder)
+        ref = str(cover_letter_ref).strip()
+
+        # If mapping already provides a full docx filename, use it directly.
+        if ref.lower().endswith(".docx"):
+            direct_path = os.path.join(base_dir, ref)
+            if os.path.exists(direct_path):
+                return direct_path
+
+        # Default pattern for label-style mappings.
+        pattern_path = os.path.join(base_dir, self.job_type.replace("<replace>", ref))
+        if os.path.exists(pattern_path):
+            return pattern_path
+
+        # Fallback: if ref is filename-like without extension.
+        alt_docx = os.path.join(base_dir, f"{ref}.docx")
+        if os.path.exists(alt_docx):
+            return alt_docx
+
+        raise FileNotFoundError(
+            f"Cover letter template not found for '{cover_letter_ref}'. Tried: "
+            f"'{pattern_path}' and filename-based fallbacks in '{base_dir}'."
+        )
+
     # Example
     def load_and_generate(self, job_info: dict):
         company_name, job_title, file_suffix, selected_idx = job_info["company"], job_info["title"], job_info["selected_document"], job_info["selected_document_index"]
         resume, coverLetter = file_suffix
         replacements = self._build_replacements(selected_idx, company_name, job_title)
-        
-        input_docx = os.path.join(self.input_docx_folder, self.job_type.replace("<replace>", coverLetter))
+
+        input_docx = self._resolve_cover_letter_template_path(coverLetter)
         self.pdf = self.word_replace_to_pdf_win(
             input_docx=input_docx,
             replacements=replacements,

@@ -4,7 +4,7 @@ DOCUMENT_STYLE = {
     "C": ["Qi Shihao", "Blockchain AI"],
     "D": ["Qi Shihao", "Data Engineer"],
     "E": ["Qi Shihao", "Fintech-AI research"],
-    "F": ["祁世豪-计算机系", "中文软件工程师"]
+    "F": ["祁世豪-计算机系", "Cover Letter -- AI Engineer CN.docx"]
 }
 
 available_documents = "\n".join(
