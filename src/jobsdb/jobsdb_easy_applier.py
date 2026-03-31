@@ -75,7 +75,7 @@ class JobsDBEasyApplier(BaseEasyApplier):
     def iterate_and_apply_jobs(self):
         """Main method: iterate through all job cards on current page and apply"""
         seen_job_ids = set()
-        max_application = 50
+        max_application = 35
         
         utils.printyellow("JobsDB: Starting job card iteration...")
         
@@ -115,14 +115,16 @@ class JobsDBEasyApplier(BaseEasyApplier):
                     continue
             
             utils.printyellow(f"JobsDB: Processed {new_jobs_processed} new jobs this round")
+            time.sleep(random.uniform(2, 4))
                 
-            # If no new jobs found, stop
-            if new_jobs_processed == 0:
-                utils.printyellow("JobsDB: No new jobs found, iteration complete")
-                break
             if not click_next_page(self.driver, self.logging_system):
                 utils.printyellow("JobsDB: No next page available, stopping")
                 break
+            
+            # # If no new jobs found, stop
+            # if new_jobs_processed == 0:
+            #     utils.printyellow("JobsDB: No new jobs found, iteration complete")
+            #     break
         
         self.logging_system.stop() # place need to change, class should initalized in main.py
         utils.printyellow(f"JobsDB: Iteration complete, processed {len(seen_job_ids)} total jobs")

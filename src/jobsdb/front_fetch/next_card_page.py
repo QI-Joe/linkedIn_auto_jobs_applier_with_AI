@@ -75,7 +75,21 @@ def click_next_page(driver: webdriver, log: logBase):
             return False
 
         WebDriverWait(driver, 10).until(lambda d: d.current_url != current_url)
-
+        
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_all_elements_located((By.CSS_SELECTOR, 'article[data-testid="job-card"]'))
+        )
+        # 3) 触发懒加载：缓慢滚动到底再回到顶
+        last_count = 0
+        for _ in range(6):
+            driver.execute_script("window.scrollBy(0, document.body.scrollHeight/3);")
+            time.sleep(0.6)
+            cur = len(driver.find_elements(By.CSS_SELECTOR, 'article[data-testid="job-card"]'))
+            if cur == last_count:
+                break
+            last_count = cur
+        driver.execute_script("window.scrollTo(0, 0);")
+        
         log.add_log_job({
             "timestamp": time.time(),
             "action": "click_next_page",
@@ -92,4 +106,19 @@ def click_next_page(driver: webdriver, log: logBase):
             "error": str(e),
             "url": getattr(driver, "current_url", "unknown"),
         })
+        return False
+    
+def wait_for_page_load(driver: webdriver, timeout=10):
+    """
+    Wait for the page to load by checking for the presence of job cards.
+
+    Returns:
+        bool: True if job cards are found within the timeout, False otherwise.
+    """
+    try:
+        WebDriverWait(driver, timeout).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "div.job-card"))
+        )
+        return True
+    except Exception:
         return False
