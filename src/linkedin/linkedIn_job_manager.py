@@ -7,6 +7,7 @@ from pathlib import Path
 from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.common.by import By
 import src.utils.utils as utils
+from src.linkedin.scraper import ListingStructureError, read_job_tiles
 from src.utils.job import Job
 from src.linkedin.linkedIn_easy_applier import LinkedInEasyApplier
 import json
@@ -87,6 +88,8 @@ class LinkedInJobManager:
                         utils.printyellow(f"Sleeping for {sleep_time / 60} minutes.")
                         time.sleep(sleep_time)
                         page_sleep += 1
+            except ListingStructureError as exc:
+                utils.printyellow(str(exc))
             except Exception:
                 traceback.format_exc()
                 pass
@@ -109,10 +112,7 @@ class LinkedInJobManager:
         except NoSuchElementException:
             pass
         
-        job_results = self.driver.find_element(By.CLASS_NAME, "jobs-search-results-list")
-        utils.scroll_slow(self.driver, job_results)
-        utils.scroll_slow(self.driver, job_results, step=300, reverse=True)
-        job_list_elements = self.driver.find_elements(By.CLASS_NAME, 'scaffold-layout__list-container')[0].find_elements(By.CLASS_NAME, 'jobs-search-results__list-item')
+        job_list_elements = read_job_tiles(self.driver)
         if not job_list_elements:
             raise Exception("No job class elements found on page")
         job_list = [Job(*self.extract_job_information_from_tile(job_element)) for job_element in job_list_elements] 

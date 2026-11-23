@@ -1,3 +1,9 @@
+# 命令行默认进入本地准备流程，在加载旧版认证和投递组件之前分派。
+if __name__ == "__main__":
+    from prepare_jobs import main as prepare_main
+
+    raise SystemExit(prepare_main())
+
 import os
 import re
 import sys
@@ -241,6 +247,3 @@ def main(resume: Path = None, platform: str = 'linkedin'):
     except Exception as e:
         print(f"An unexpected error occurred: {str(e)}")
         print("Refer to the general troubleshooting guide: https://github.com/feder-cr/LinkedIn_AIHawk_automatic_job_application/blob/main/readme.md#configuration")
-
-if __name__ == "__main__":
-    main()

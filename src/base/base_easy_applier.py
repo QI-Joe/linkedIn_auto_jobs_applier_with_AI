@@ -5,7 +5,7 @@ import tempfile
 import time
 import traceback
 from abc import ABC, abstractmethod
-from typing import List, Optional, Any, Tuple
+from typing import TYPE_CHECKING, List, Optional, Any, Tuple
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
@@ -15,7 +15,9 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import Select, WebDriverWait
 from selenium.webdriver import ActionChains
 import src.utils.utils as utils
-from src.utils.simplifed_gpt import SimplifedGPT
+
+if TYPE_CHECKING:
+    from src.utils.simplifed_gpt import SimplifedGPT
 
 
 class BaseEasyApplier(ABC):

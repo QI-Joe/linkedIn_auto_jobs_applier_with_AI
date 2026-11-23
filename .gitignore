@@ -27,3 +27,6 @@ document_folder/
 job_apply_logs/
 windows_key
 *.pub
+
+markdown/
+checks/

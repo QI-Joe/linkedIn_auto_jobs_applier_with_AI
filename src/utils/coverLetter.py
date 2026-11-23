@@ -3,8 +3,6 @@ import os, platform
 import shutil
 from pathlib import Path
 import re
-import win32com.client as win32
-import win32com
 import json
 
 def open_with_default_app(path: Path):
@@ -23,6 +21,13 @@ class CoverLetterPDF:
         """
         Create Word COM app with recovery for corrupted win32com gen_py cache.
         """
+        # 只有执行 Word 导出才需要桌面组件，读取职位不依赖 Windows。
+        try:
+            import win32com
+            import win32com.client as win32
+        except ImportError as exc:
+            raise RuntimeError("当前 Word 导出需要 Windows、Microsoft Word 和 pywin32。") from exc
+
         try:
             return win32.gencache.EnsureDispatch("Word.Application")
         except Exception as e:

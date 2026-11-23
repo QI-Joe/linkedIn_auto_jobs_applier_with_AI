@@ -18,10 +18,16 @@
 
 ---
 
-## 📋 **Supported Platforms**
+## 当前支持范围
 
-| Platform | Status | Features |
-|----------|--------|----------|
+| 平台 | 已验证的本地流程 |
+| --- | --- |
+| JobsDB | 从详情和四步页面样本准备材料、填写已确认答案，停在人工审阅。 |
+| LinkedIn | 从列表和选中详情生成有理由的每日推荐，区分站内 Easy Apply 和外部申请。 |
+
+当前入口使用本地文件。真实站点登录、附件接收与提交仍待单独验证。以下旧版组件与环境说明保留作维护参考。
+
+----------|--------|----------|
 | 🟢 **JobsDB** | ✅ **Fully Supported** | Auto-apply, Form filling, Document upload |
 | 🟡 **LinkedIn** | ⚠️ **Under Development** | Status unknown due to recent code changes |
 
@@ -130,32 +136,14 @@ DOCUMENT_STYLE = {
 
 ---
 
-## 🚀 **Running the Application**
+## 运行本地准备流程
 
-### Basic Usage
 ```bash
-python main.py --data_folder path/to/your/data_folder
+conda run -n base28 python main.py jobsdb --help
+conda run -n base28 python main.py recommend --help
 ```
 
-### Available Options
-```bash
-# Run with specific resume
-python main.py --data_folder ./data --resume specific_resume.pdf
-
-# Run JobsDB automation (currently recommended)
-python main.py --data_folder ./data --platform jobsdb
-
-# View logs and results
-python main.py --data_folder ./data --view-logs
-```
-
-### Monitoring Results
-
-1. **Real-time Console Output**: Monitor application progress
-2. **JSON Logs**: Check `logs/job_applications_YYYYMMDD.jsonl` for detailed logs
-3. **Generated Documents**: Find personalized resumes/cover letters in `document_folder/submitted/`
-
----
+准备任务读取结构化 CV、简历原件、偏好和网页样本，默认写入 `data_folder/output/<日期>/`。Word 陈述经 LibreOffice Writer 渲染，再用 Poppler 核对实际页数。依赖见 [requirement.txt](requirement.txt)，本地验收入口为 [checks/check_preparation.py](checks/check_preparation.py)。输入示例、阶段和测试结果见 [申请准备进度与离线验收](markdown/application_preparation_progress.md)。
 
 ## 🔧 **Environment Setup**
 

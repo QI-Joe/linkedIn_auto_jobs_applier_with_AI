@@ -10,6 +10,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 import src.utils.utils as utils
 from src.base.base_easy_applier import BaseEasyApplier
+from src.jobsdb.scraper import read_detail_fields
 from src.utils.coverLetter import CoverLetterPDF
 import src.utils.strings as strings
 from collections import defaultdict
@@ -309,25 +310,11 @@ class JobsDBEasyApplier(BaseEasyApplier):
 
     def _extract_job_info_from_sidebar(self, sidebar: WebElement, job_id: str) -> dict:
         """Extract job info from sidebar"""
-        info = {
-            'job_id': job_id,
-            'title': 'h1[data-automation="job-detail-title"]',
-            'company': '[data-automation="advertiser-name"]',
-            'work_style': '[data-automation="job-detail-work-type"]',
-            'salary': '[data-automation="job-detail-salary"]',
-            'link': self.driver.current_url,
-            'detailed_page': dict(),
-        }
-        
-        # Extract title
-        for k, v in info.items():
-            try:
-                element = sidebar.find_element(By.CSS_SELECTOR, v)
-                text = element.text.strip()
-                info[k] = text
-            except Exception:
-                continue
-        
+        info = read_detail_fields(sidebar)
+        if not info["title"] or not info["company"]:
+            raise ValueError("JobsDB 详情缺少职位名称或公司，无法确认申请对象")
+        info["job_id"] = job_id
+        info["link"] = self.driver.current_url
         info["detailed_page"] = self.sidebar_job_detail(sidebar)
         
         return info

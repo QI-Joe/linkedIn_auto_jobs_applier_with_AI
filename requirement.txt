@@ -1,0 +1,7 @@
+# base28 / Python 3.10：本地申请准备、快照解析和离线验收。
+# 完整应用依赖仍见 requirements.txt；Chrome、驱动、Writer 和 Poppler 属系统工具。
+selenium==4.9.1
+python-docx==1.2.0
+reportlab==5.1.0
+lxml==6.1.1
+PyYAML>=6,<7
