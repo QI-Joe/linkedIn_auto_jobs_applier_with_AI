@@ -2,7 +2,7 @@
 
 from lxml.html import HtmlElement
 
-from src.utils.job import Job
+from src.utils.job import Job, unidentified_card
 
 
 def _field(card: HtmlElement, name: str) -> str:
@@ -18,7 +18,11 @@ def read_jobs(root: HtmlElement) -> list[Job]:
     seen = set()
     for card in cards:
         job_id = card.get("data-job-id", "")
-        if not job_id.isascii() or not job_id.isdecimal() or job_id in seen:
+        card_text = " ".join(card.itertext()).strip()
+        identified = job_id.isascii() and job_id.isdecimal()
+        if not identified:
+            job_id = unidentified_card(card_text)
+        if job_id in seen:
             continue
         seen.add(job_id)
         # 列表只披露职位摘要；完整正文须在对应详情页上另行读取。
@@ -26,11 +30,12 @@ def read_jobs(root: HtmlElement) -> list[Job]:
             title=_field(card, "jobTitle"),
             company=_field(card, "jobCompany"),
             location=_field(card, "jobLocation"),
-            link=f"https://hk.jobsdb.com/job/{job_id}",
+            link=f"https://hk.jobsdb.com/job/{job_id}" if identified else "",
             apply_method="",
             platform="jobsdb",
             salary=_field(card, "jobSalary"),
             date_posted=_field(card, "jobListingDate"),
-            platform_specific_data={"job_id": job_id, "summary": _field(card, "jobShortDescription")},
+            platform_specific_data={"job_id": job_id, "summary": _field(card, "jobShortDescription"),
+                                    "card_text": card_text},
         ))
     return jobs

@@ -2,13 +2,16 @@ import os
 import random
 import time
 import traceback
+import re
+from urllib.parse import urlsplit
+from src.preparation.history import DEFAULT_HISTORY, JobHistory, onsite_eligible
 from itertools import product
 from pathlib import Path
 from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.common.by import By
 import src.utils.utils as utils
 from src.linkedin.scraper import ListingStructureError, read_job_tiles
-from src.utils.job import Job
+from src.utils.job import Job, unidentified_card
 from src.linkedin.linkedIn_easy_applier import LinkedInEasyApplier
 import json
 
@@ -116,13 +119,24 @@ class LinkedInJobManager:
         if not job_list_elements:
             raise Exception("No job class elements found on page")
         job_list = [Job(*self.extract_job_information_from_tile(job_element)) for job_element in job_list_elements] 
+        history = JobHistory(DEFAULT_HISTORY)
+        for job, tile in zip(job_list, job_list_elements):
+            job.set_platform_data("card_text", tile.text)
+            address = urlsplit(job.link)
+            identity = re.fullmatch(r"/jobs/view/(?:[^/]+-)?([0-9]+)/?", address.path)
+            if address.hostname in {"linkedin.com", "www.linkedin.com"} and identity:
+                job.set_platform_data("job_id", identity[1])
+                job.link = f"https://www.linkedin.com/jobs/view/{identity[1]}/"
+            else:
+                job.set_platform_data("job_id", unidentified_card(tile.text))
+            history.save([job], "browser-list")
         for job in job_list:
             if self.is_blacklisted(job.title, job.company, job.link):
                 utils.printyellow(f"Blacklisted {job.title} at {job.company}, skipping...")
                 self.write_to_file(job, "skipped")
                 continue
             try:
-                if job.apply_method not in {"Continue", "Applied", "Apply"}:
+                if onsite_eligible(job) and onsite_eligible(history.get(job.platform, job.get_platform_data("job_id"))):
                     self.easy_applier_component.job_apply(job)
                     self.write_to_file(job, "success")
             except Exception as e:
@@ -196,7 +210,7 @@ class LinkedInJobManager:
         try:
             apply_method = job_tile.find_element(By.CLASS_NAME, 'job-card-container__apply-method').text
         except:
-            apply_method = "Applied"
+            apply_method = ""
 
         return job_title, company, job_location, link, apply_method
     

@@ -1,3 +1,5 @@
+from urllib.parse import urlsplit
+from src.preparation.history import DEFAULT_HISTORY, JobHistory, onsite_eligible
 import base64
 import json
 import os
@@ -49,13 +51,18 @@ class LinkedInEasyApplier:
             raise Exception(f"Error loading questions data from JSON file: \nTraceback:\n{tb_str}")
 
     def job_apply(self, job: Any):
+        if not onsite_eligible(job):
+            raise ValueError("非已确认的 LinkedIn Easy Apply 职位")
         self.driver.get(job.link)
         time.sleep(random.uniform(3, 5))
         try:
+            self._require_job_page(job)
             easy_apply_button = self._find_easy_apply_button()
             job.set_job_description(self._get_job_description())
             job.set_recruiter_link(self._get_job_recruiter())
+            JobHistory(DEFAULT_HISTORY).save([job], "browser-detail")
             actions = ActionChains(self.driver)
+            self._require_job_page(job)
             actions.move_to_element(easy_apply_button).click().perform()
             self.gpt_answerer.set_job(job)
             self._fill_application_form(job)
@@ -70,14 +77,14 @@ class LinkedInEasyApplier:
             self._scroll_page()
             buttons = WebDriverWait(self.driver, 10).until(
                 EC.presence_of_all_elements_located(
-                    (By.XPATH, '//button[contains(@class, "jobs-apply-button") and contains(., "Easy Apply")]')
+                    (By.XPATH, '//button[contains(@class, "jobs-apply-button") and normalize-space(.)="Easy Apply"]')
                 )
             )
             for index, _ in enumerate(buttons):
                 try:
                     button = WebDriverWait(self.driver, 10).until(
                         EC.element_to_be_clickable(
-                            (By.XPATH, f'(//button[contains(@class, "jobs-apply-button") and contains(., "Easy Apply")])[{index + 1}]')
+                            (By.XPATH, f'(//button[contains(@class, "jobs-apply-button") and normalize-space(.)="Easy Apply"])[{index + 1}]')
                         )
                     )
                     return button
@@ -120,9 +127,17 @@ class LinkedInEasyApplier:
         utils.scroll_slow(self.driver, scrollable_element, step=300, reverse=False)
         utils.scroll_slow(self.driver, scrollable_element, step=300, reverse=True)
 
+    def _require_job_page(self, job):
+        address = urlsplit(self.driver.current_url)
+        if (address.scheme != "https" or address.netloc != "www.linkedin.com"
+                or address.path.rstrip("/") != urlsplit(job.link).path.rstrip("/")):
+            raise ValueError("无法确认当前页面为同一 LinkedIn 职位")
+
     def _fill_application_form(self, job):
         while True:
+            self._require_job_page(job)
             self.fill_up(job)
+            self._require_job_page(job)
             if self._next_or_submit():
                 break
 

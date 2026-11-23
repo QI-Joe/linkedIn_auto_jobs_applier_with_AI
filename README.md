@@ -1,39 +1,147 @@
-<div align="center">
-  <img src="./assets/linkedin_aihawk.png" width="300" alt="Job Application Automation Tool">
-</div>
+# JobsDB 与 LinkedIn 本地申请准备工具
 
-<div align="center">
+两个平台共用本机职位档案。采集时先保存每张可识别的卡片，再补充详情。推荐读取历史记录，可按新的求职偏好反复排序。外部、未知或已申请的职位同样留档，申请材料只为确认的 JobsDB Quick Apply 或 LinkedIn Easy Apply 职位准备。当前命令行停在人工审阅。
 
-[![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)](https://www.python.org/downloads/)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-1.0-orange.svg)](CHANGELOG.md)
-[![Status](https://img.shields.io/badge/Status-Development-yellow.svg)](#roadmap)
+## 采集一次，之后从历史推荐
 
-# Multi-Platform Job Application Automation Tool
-#### 🤖 **Version 1.0** | Automate job applications across multiple platforms with AI-powered form filling
+默认数据库是 `data_folder/job_history.sqlite3`。各命令都接受 `--history` 指向同一个私有 SQLite 文件。数据库由 Python 标准库管理，采集与推荐分别运行。不同用户应使用各自的库。
 
-[![Telegram Community](https://img.shields.io/badge/Join-Telegram_Community-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white)](https://t.me/AIhawkCommunity)
+1. **浏览器采集。** 安装下文的 Python 依赖与 Chrome，在本机 Chrome 专用用户目录中完成需要的登录，关闭占用该目录的浏览器。将命令里的示例地址替换为实际打开的搜索结果页。采集会打开该页当前可识别的职位卡片及同站详情；多页搜索可重复传入 `--url`。详情超时或身份不一致时，已读取的卡片仍在库中。使用 Selenium 时需要可用的 ChromeDriver 或能由 Selenium Manager 获取匹配驱动的环境。
+2. **已有数据。** 有保存过的列表、详情或旧 JobsDB 每日日志时，用下方相应命令导入本机实际存在的文件，相应选项均可单独使用。旧日志混有翻页事件时只导入职位记录。无需为日常推荐重新复制网页元素。
+3. **查看推荐。** 最后一条命令只需要结构化 CV、偏好和已有职位库，无需浏览器、简历附件或 Writer。打开终端输出的批次 JSON，在 `recommendations` 中查看排名、理由和 `onsite_eligible`。可选的 `--resume` 会为排名范围内符合站内申请条件的职位另存材料，此时需要 Writer 和 Poppler。
 
-</div>
+```text
+python main.py collect --url "https://hk.jobsdb.com/ai-engineer-jobs" --browser-profile "data_folder/collection-profile"
+python main.py collect --snapshot markdown/Jobsdb.md --snapshot markdown/Linkedin.md --detail markdown/webResource/jobsdb_element/Jobsdb_general_single_board.md
+python main.py collect --legacy-log "job_apply_logs"
+python main.py recommend --cv data_folder/cv.yaml --profile data_folder/preferences.yaml --top 5
+```
 
----
+`jobs` 表以平台和职位 ID 为键，记录首次、最近观察时间及合并后的字段。`observations` 保存各来源的不同版本，重读简略卡片不会抹掉已取得的详情。历史记录代表曾经看到的内容，申请前仍需核实职位是否开放。[采集入口](src/preparation/collect.py) · [职位档案](src/preparation/history.py)
 
-## 当前支持范围
+查看已存的职位可运行 `python main.py history`。从清单取出实际的平台和 ID，再运行 `python main.py history --platform linkedin --job-id 12345` 查看该条完整记录。LinkedIn 详情披露的公司介绍保存在 `platform_specific_data.company_description`；JobsDB 旧日志的分段内容保存在 `platform_specific_data.sections`。缺少 ID 的可识别卡片按内容指纹留档，不进入申请。
 
-| 平台 | 已验证的本地流程 |
+LinkedIn 公开列表可直接读取公开职位和详情，未披露申请方式的职位先留档。JobsDB 如显示站点验证页，请先在本机正常浏览器中完成验证再采集。有关未来外站表单 Agent 的源码评估见[克隆与接入方案](markdown/external_application_agent_research.md)。
+
+## 第一次在本地测试
+
+先把**包含本次改动的项目版本**同步到电脑，在有 `main.py` 和 `requirement.txt` 的项目根目录打开终端。以下命令使用 Conda 和 Python 3.10。已有 `base28` 环境时可以跳过创建步骤。请使用单数的 `requirement.txt` 安装离线流程依赖。
+
+```text
+conda create -n base28 python=3.10 pip -y
+conda activate base28
+python -m pip install -r requirement.txt
+```
+
+### Ubuntu 服务器或桌面
+
+Writer 将 Word 陈述实际排版为 PDF，Poppler 检查页数并读取末段文字。服务器可以无桌面运行。
+
+```bash
+sudo apt update
+sudo apt install libreoffice-writer poppler-utils
+soffice --version
+pdfinfo -v
+pdftotext -v
+python checks/check_preparation.py
+```
+
+### Windows 64 位电脑
+
+在可使用 Conda 的 PowerShell 中激活上述环境，用 conda-forge 安装 Poppler。安装含 Writer 的 Windows 版 LibreOffice 后，设置下方的路径。自定义安装位置时将第一行改为实际路径。[LibreOffice 下载](https://www.libreoffice.org/download/download-libreoffice/) · [Windows 命令行入口](https://help.libreoffice.org/latest/en-US/text/shared/guide/start_parameters.html) · [conda-forge 的 Poppler 包](https://anaconda.org/conda-forge/poppler)
+
+```powershell
+$office = "C:\Program Files\LibreOffice\program\soffice.com"
+conda install -n base28 -c conda-forge poppler -y
+& $office --version
+pdfinfo -v
+pdftotext -v
+python checks/check_preparation.py --office "$office"
+```
+
+### `checks/` 检查什么
+
+[验收脚本](checks/check_preparation.py) 从 [虚构网页样本](checks/fixtures/) 读取 HTML，在临时目录创建虚构简历、求职偏好和答案，然后调用实际入口 `main.py`。本节验收需要本机有 checks/ 脚本、测试样本和上述依赖。生产采集和历史推荐独立于该目录。请用普通 Python 模式运行，脚本依赖断言。
+
+| 运行场景 | 通过时应观察到的行为 |
 | --- | --- |
-| JobsDB | 从详情和四步页面样本准备材料、填写已确认答案，停在人工审阅。 |
-| LinkedIn | 从列表和选中详情生成有理由的每日推荐，区分站内 Easy Apply 和外部申请。 |
+| JobsDB，已确认 7 个答案 | 生成 1 份材料，演练到第 4 步。审阅页的附件信息仍需人工核对。 |
+| JobsDB，移除 1 个答案后重跑 | 另存 1 个版本，在第 2 步暂停。原简历和上一版材料保持完整。 |
+| LinkedIn，每日候选上限 20、优先 5 | 最多列出 5 个推荐职位，跳过已申请职位；只为具备站内申请资格的候选生成材料。 |
+| 每份材料 | 核对简历副本、文件哈希、职位与陈述的对应关系、导出 PDF 的实际页数，以及记录中的 `submitted: false`。 |
 
-当前入口使用本地文件。真实站点登录、附件接收与提交仍待单独验证。以下旧版组件与环境说明保留作维护参考。
+成功时，最后一行是 **`离线验收通过`**。默认退出后清理临时材料。想打开生成的 Word、PDF 或 JSON 时，在命令末尾加 `--output "data_folder/check-output"`。Ubuntu 24.04 已通过虚构样本和工作区现有网页样本两套验收，原生 Windows 的运行结果尚待实机验证。
 
-----------|--------|----------|
-| 🟢 **JobsDB** | ✅ **Fully Supported** | Auto-apply, Form filling, Document upload |
-| 🟡 **LinkedIn** | ⚠️ **Under Development** | Status unknown due to recent code changes |
+## 使用自己的材料
 
-> **Note:** Currently, only JobsDB automation is fully functional and tested. LinkedIn support is being updated and will be available in the next release.
+从历史推荐需要 CV 和偏好两份 YAML；演练申请或生成材料时再提供简历原件。示例使用本机的 `data_folder/`，YAML 用 UTF-8 保存。网页可以继续使用随附的虚构样本。
 
----
+| 输入 | 需要准备的内容 |
+| --- | --- |
+| `--resume` | 可读取的简历原件，PDF 或 DOCX 均可。程序复制原件到每个职位的版本目录。 |
+| `--cv` | 结构化履历 YAML。至少写一条可引用的 `projects[].description` 或 `experience_details[].key_responsibilities`。程序据此生成英文个人陈述，建议提供可直接引用的英文经历。 |
+| `--profile` | 求职偏好和本人确认的答案 YAML。题干按网页原文填写，多选题用列表。薪资、工作权、语言等答案应由本人确认。缺少答案时可先查看暂停原因。 |
+
+### 网页样本何时用到
+
+开发时，保存的 HTML 用于定位页面元素和回归测试。已有样本也可作为一次性导入来源。运行推荐时会从历史库取数；要补充新的职位，可运行浏览器采集或再导入一份列表。仅在复现某个页面解析问题时需要对应网页片段。
+
+| 离线模式 | 该模式读取的网页数据 |
+| --- | --- |
+| JobsDB 单职位演练 | 一份含标题、公司、描述和 Quick Apply 链接的详情 HTML，以及同一职位的四步页面片段。步骤目录内每步各有一个以 `step1.md` 至 `step4.md` 结尾的文件。 |
+| LinkedIn 职位推荐 | 搜索页快照首行为页面 URL，第二行起为复制的元素 HTML。选中职位的 ID 来自 URL 的 `currentJobId`。导入时可选的 Easy Apply 样本目录包含 `easy_apply_step1.md` 至 `easy_apply_step4.md`；第 3 步片段仅能验证提交文字。 |
+
+评分与排序由 `evaluate()` 和 `daily_ranking()` 完成。批次 JSON 的 `recommendations` 列出优先职位，`results` 记录成功生成的材料包。JobsDB 单职位演练对传入的详情单独核验。[推荐入口](prepare_jobs.py) · [匹配与排序](src/preparation/matching.py)
+
+### 个人文件示例
+
+最小的 `data_folder/cv.yaml` 示例。使用时替换为真实经历。
+
+```yaml
+projects:
+  - name: Search evaluation
+    description: I built a Python tool to evaluate search results.
+```
+
+最小的 `data_folder/preferences.yaml` 示例。空答案可用于测试人工确认流程。
+
+```yaml
+positions: ["Engineer"]
+locations: ["Hong Kong"]
+skills: ["Python"]
+answers: {}
+applied: {}
+```
+
+先将原简历放在 `data_folder/resume.pdf`，再用随附样本运行下面任一条命令。在 Windows 的同一 PowerShell 会话中，每条材料准备命令末尾加上 `--office "$office"`。之后可把 `--detail`、`--steps`、`--snapshot` 换成本机的其他样本。
+
+```text
+python main.py jobsdb --detail checks/fixtures/webResource/jobsdb_element/Jobsdb_general_single_board.md --steps checks/fixtures/webResource/jobsdb_element --cv data_folder/cv.yaml --profile data_folder/preferences.yaml --resume data_folder/resume.pdf
+python main.py recommend --snapshot checks/fixtures/Linkedin.md --easy-apply-steps checks/fixtures/webResource/linkedin_element --target 20 --top 5 --cv data_folder/cv.yaml --profile data_folder/preferences.yaml --resume data_folder/resume.pdf
+```
+
+运行后先打开终端打印的批次 JSON，按 `packages` 的相对路径进入 `data_folder/output/<日期>/<平台>/<职位ID>/v-…/`。其中 `manifest.json` 记录职位、版本、材料哈希和待确认项，`answers.json` 记录问答，`Personal Statement.docx` 可编辑，旁边的 PDF 可检查最终排版。每次重跑会生成新版本。
+
+## 本地出错后如何在服务器复现
+
+1. 在两端切换到含同一修改的代码版本，用 `git rev-parse --short HEAD` 和 `git status --short` 核对提交和未提交改动。同步代码时包含 `checks/check_preparation.py` 与 `checks/fixtures/`。每台机器单独安装依赖。
+2. 先在两端运行各自的虚构样本验收。若都通过，再复测具体网页。当前工作区已有原始样本，使用 `python checks/check_preparation.py --samples markdown`（Windows 加 `--office "$office"`）。此验收的题目、数量和页面标记针对这组固定样本。其他职位请用上节的 `main.py` 命令检查。忽略的 `markdown/` 数据不会随普通 Git 克隆同步。
+3. 回报问题时附上系统、`python --version`、Writer 和 Poppler 的版本、使用的子命令、完整错误类型和失败步骤。路径中的用户名可替换成占位符。如果只有某个网页失败，提供能复现的最小脱敏元素。原简历、答案、Cookie、带个人信息的原页或完整输出目录留在本机。
+4. 收到服务器修复后，本地同步同一版本，先重跑虚构样本，再重跑先前失败的命令。若报告中有 `needs_confirmation`，先看 `issues` 和未确认题目；验收用例本身也会验证这种预期暂停。
+
+| 现象 | 排查入口 |
+| --- | --- |
+| 提示模块缺失 | 确认 `conda activate base28` 后执行 `python -m pip install -r requirement.txt`。 |
+| 找不到 Writer、`pdfinfo` 或 `pdftotext` | 在同一终端逐项执行上面的版本检查。Windows 检查 `--office` 路径和激活的 Conda 环境。 |
+| 找不到网页样本 | 检查当前目录、实际文件名大小写（如 `Linkedin.md`）和 `--samples` 路径。可先用随附样本复测。 |
+| 陈述超过一页或末段不完整 | 用相同 Writer 版本和字体复现，检查引用的经历长度。缩短履历中对应段落后重新生成并打开 PDF。 |
+
+旧版浏览器自动化和 AIHawk 的配置方式见[原版文档](docs/original_linkedin_aihawk_readme.md)。工作区中的 `markdown/project_design_and_v1_status.md` 和 `markdown/application_preparation_progress.md` 分别记录设计梳理与后续离线实现进展。
+
+<details>
+<summary>维护参考：早期组件、部署说明与历史路线图</summary>
+
+以下内容保留旧版命令、依赖及当时的支持情况。当前离线入口的环境和验收步骤见上文。
 
 ## 🧩 **Project Components**
 
@@ -135,15 +243,6 @@ DOCUMENT_STYLE = {
 | `logs/` directory | Application logs | Auto-created |
 
 ---
-
-## 运行本地准备流程
-
-```bash
-conda run -n base28 python main.py jobsdb --help
-conda run -n base28 python main.py recommend --help
-```
-
-准备任务读取结构化 CV、简历原件、偏好和网页样本，默认写入 `data_folder/output/<日期>/`。Word 陈述经 LibreOffice Writer 渲染，再用 Poppler 核对实际页数。依赖见 [requirement.txt](requirement.txt)，本地验收入口为 [checks/check_preparation.py](checks/check_preparation.py)。输入示例、阶段和测试结果见 [申请准备进度与离线验收](markdown/application_preparation_progress.md)。
 
 ## 🔧 **Environment Setup**
 
@@ -701,3 +800,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Disclaimer
 LinkedIn_AIHawk is developed for educational purposes only. The creator does not assume any responsibility for its use. Users should ensure they comply with LinkedIn's terms of service, any applicable laws and regulations, and ethical considerations when using this tool. The use of automated tools for job applications may have implications on user accounts, and caution is advised.
+
+</details>

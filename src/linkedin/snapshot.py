@@ -8,11 +8,60 @@ from lxml import html
 
 from lxml.html import HtmlElement
 
-from src.utils.job import Job
+from src.utils.job import Job, unidentified_card
+
+
+def class_text(element, name):
+    matches = element.find_class(name)
+    return " ".join(matches[0].text_content().split()) if len(matches) == 1 else ""
+
+
+def public_cards(results):
+    jobs = {}
+    for item in results.xpath("./li"):
+        cards = item.find_class("base-card")
+        if not cards:
+            continue
+        card = cards[0]
+        text = " ".join(card.text_content().split())
+        identity = re.fullmatch(r"urn:li:jobPosting:([0-9]+)", card.get("data-entity-urn", ""))
+        job_id = identity[1] if identity else unidentified_card(text)
+        dates = card.xpath(".//time/@datetime")
+        jobs[job_id] = Job(
+            class_text(card, "base-search-card__title"), class_text(card, "base-search-card__subtitle"),
+            class_text(card, "job-search-card__location"),
+            f"https://www.linkedin.com/jobs/view/{job_id}/" if identity else "", "",
+            date_posted=dates[0] if dates else "",
+            platform_specific_data={"job_id": job_id, "card_text": text, "listing_layout": "public"},
+        )
+    if not jobs:
+        raise ValueError("LinkedIn 公开列表中未识别到职位卡片")
+    return list(jobs.values())
+
+
+def public_detail(root, url, card):
+    """访客详情按地址的职位 ID、标题和公司核对；缺少明确按钮时仅保存。"""
+    job_id = card.get_platform_data("job_id")
+    path = urlsplit(url).path
+    match = re.fullmatch(r"/jobs/view/(?:[^/]+-)?([0-9]+)/?", path)
+    if not match or match[1] != job_id:
+        return None
+    title = class_text(root, "top-card-layout__title")
+    company = class_text(root, "topcard__org-name-link")
+    bodies = root.find_class("description__text")
+    description = class_text(bodies[0], "show-more-less-html__markup") if len(bodies) == 1 else ""
+    if title != card.title or company != card.company or not description:
+        return None
+    return Job(title, company, card.location, card.link, card.apply_method, description=description,
+               date_posted=card.date_posted, platform_specific_data=dict(card.platform_specific_data))
 
 
 def read_jobs(root: HtmlElement, selected_id: str = "") -> list[Job]:
     columns = root.xpath('.//*[@componentkey="SearchResultsMainContent"]')
+    if not columns:
+        public = root.find_class("jobs-search__results-list")
+        if len(public) == 1:
+            return public_cards(public[0])
     if len(columns) != 1:
         raise ValueError("缺少唯一的 LinkedIn 搜索结果区 SearchResultsMainContent。")
     # 同一 ID 出现在卡片的内外两层，只读取具有交互语义的外层。
@@ -23,7 +72,11 @@ def read_jobs(root: HtmlElement, selected_id: str = "") -> list[Job]:
     jobs = {}
     for card in cards:
         job_id = card.get("componentkey").removeprefix("job-card-component-ref-")
-        if not job_id.isascii() or not job_id.isdecimal() or job_id in jobs:
+        card_text = " ".join(card.itertext()).strip()
+        identified = job_id.isascii() and job_id.isdecimal()
+        if not identified:
+            job_id = unidentified_card(card_text)
+        if job_id in jobs:
             continue
         # 首段同时含无障碍朗读标题和显示标题，后者不附带“已选中”等状态文字。
         title = company = location = ""
@@ -44,10 +97,10 @@ def read_jobs(root: HtmlElement, selected_id: str = "") -> list[Job]:
             title=title,
             company=company,
             location=location,
-            link=f"https://www.linkedin.com/jobs/view/{job_id}/",
+            link=f"https://www.linkedin.com/jobs/view/{job_id}/" if identified else "",
             apply_method=method,
             platform="linkedin",
-            platform_specific_data={"job_id": job_id},
+            platform_specific_data={"job_id": job_id, "card_text": card_text},
         )
 
     # 侧栏只有当前选中的职位。用详情链接复核页面 URL 中的 ID，避免给整页卡片复制同一份正文。
@@ -81,7 +134,16 @@ def read_jobs(root: HtmlElement, selected_id: str = "") -> list[Job]:
                     elif in_requirements and element.tag in {"ul", "ol"}:
                         requirements.extend(li.text_content().strip() for li in element.xpath("./li"))
                 job.platform_specific_data["requirements"] = requirements
+        if paths == {f"/jobs/view/{selected_id}"}:
+            job = jobs[selected_id]
+            company_text = root.xpath(
+                './/h2[normalize-space(.)="About the company"]/../..//*[@data-testid="expandable-text-box"]'
+            )
+            if len(company_text) == 1:
+                job.set_platform_data("company_description", " ".join(company_text[0].itertext()).strip())
             links = root.xpath('.//a[@aria-label="Apply on company website"]/@href')
+            if links and job.apply_method != "Applied":
+                job.apply_method = "External"
             if len(links) == 1:
                 url = urlsplit(links[0])
                 destination = links[0]

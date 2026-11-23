@@ -9,6 +9,8 @@ def read_detail_fields(sidebar: WebElement) -> dict[str, str]:
     selectors = {
         "title": 'h1[data-automation="job-detail-title"]',
         "company": '[data-automation="advertiser-name"]',
+        "location": '[data-automation="job-detail-location"]',
+        "description": '[data-automation="jobAdDetails"]',
         "work_style": '[data-automation="job-detail-work-type"]',
         "salary": '[data-automation="job-detail-salary"]',
     }

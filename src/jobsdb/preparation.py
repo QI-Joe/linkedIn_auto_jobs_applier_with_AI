@@ -3,7 +3,7 @@
 import re
 from collections import defaultdict
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import urljoin, urlsplit
 
 from lxml import html
 
@@ -16,22 +16,53 @@ def page(path: Path):
 
 
 def read_detail(path: Path) -> Job:
-    root = page(path)
+    raw = path.read_text(encoding="utf-8-sig")
+    header, _, markup = raw.partition("\n")
+    known_id = ""
+    if header.strip().startswith("https://"):
+        address = urlsplit(header.strip())
+        match = re.fullmatch(r"/job/([0-9]+)/?", address.path)
+        if address.netloc != "hk.jobsdb.com" or not match:
+            raise ValueError("详情快照首行应为该 JobsDB 职位的 HTTPS 地址")
+        known_id = match[1]
+        raw = markup
+    root = html.fragment_fromstring(raw, create_parent="div", parser=html.HTMLParser(no_network=True))
+    return parse_detail(root, known_id)
+
+
+def parse_detail(root, known_id=""):
+    """没有站内申请按钮的详情也归档；ID 必须来自本平台职位地址。"""
     def field(name):
         return root.xpath('normalize-space(.//*[@data-automation=$name])', name=name)
 
     links = root.xpath('.//a[@data-automation="job-detail-apply"]')
-    if len(links) != 1:
-        raise ValueError("详情页缺少唯一的申请链接")
-    url = urlsplit(links[0].get("href", ""))
-    match = re.fullmatch(r"/job/([0-9]+)/apply/?", url.path)
-    if not match or url.netloc not in {"", "hk.jobsdb.com"} or field("job-detail-apply").lower() != "quick apply":
-        raise ValueError("该职位无法确认为 JobsDB Quick Apply，停止站内演练")
-    job_id = match[1]
+    href = links[0].get("href", "") if len(links) == 1 else ""
+    apply_url = urljoin("https://hk.jobsdb.com", href) if href else ""
+    url = urlsplit(apply_url)
+    native = re.fullmatch(r"/job/([0-9]+)/apply/?", url.path)
+    native = native if (url.scheme, url.netloc) == ("https", "hk.jobsdb.com") else None
+    ids = {known_id} if known_id else set()
+    if native:
+        ids.add(native[1])
+    for canonical in root.xpath('.//link[@rel="canonical"]/@href'):
+        address = urlsplit(canonical)
+        match = re.fullmatch(r"/job/([0-9]+)/?", address.path)
+        if match and address.hostname == "hk.jobsdb.com":
+            ids.add(match[1])
+    if len(ids) != 1:
+        raise ValueError("JobsDB 详情缺少唯一的职位 ID")
+    job_id = ids.pop()
+    method = "Unknown"
+    if native and field("job-detail-apply").casefold() == "quick apply":
+        method = "Quick Apply"
+    elif apply_url and url.hostname != "hk.jobsdb.com":
+        method = "External"
     job = Job(field("job-detail-title"), field("advertiser-name"), field("job-detail-location"),
-              f"https://hk.jobsdb.com/job/{job_id}", "Quick Apply", platform="jobsdb")
+              f"https://hk.jobsdb.com/job/{job_id}", method, platform="jobsdb")
     job.description = field("jobAdDetails")
+    job.industry = field("job-detail-classifications")
     job.salary = field("job-detail-salary")
+    job.job_type = field("job-detail-work-type")
     if not all((job.title, job.company, job.description)):
         raise ValueError("详情页缺少标题、公司或正文")
     requirements = []
@@ -40,7 +71,7 @@ def read_detail(path: Path) -> Job:
         if "looking for" in heading or "requirements" in heading:
             requirements.extend(item.text_content().strip() for item in group.xpath("./li"))
     job.platform_specific_data.update(job_id=job_id, requirements=requirements,
-                                      apply_url=job.link + "/apply")
+                                      apply_url=apply_url)
     return job
 
 

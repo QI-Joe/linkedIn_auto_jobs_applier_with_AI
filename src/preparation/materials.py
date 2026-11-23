@@ -10,6 +10,8 @@ import tempfile
 from pathlib import Path
 from zipfile import BadZipFile, ZipFile
 
+from src.preparation.history import onsite_eligible
+
 from docx import Document
 from docx.shared import Cm, Pt
 
@@ -29,7 +31,7 @@ def digest(path):
 def check_resume(path):
     suffix = path.suffix.lower()
     if suffix == ".pdf":
-        output = subprocess.run(["pdfinfo", str(path.resolve())], capture_output=True, text=True,
+        output = subprocess.run(["pdfinfo", str(path.resolve())], capture_output=True, encoding="utf-8", errors="replace",
                                 env={**os.environ, "LC_ALL": "C"}, timeout=20)
         if output.returncode == 0 and re.search(r"(?m)^Pages:\s+[1-9]\d*\s*$", output.stdout):
             return
@@ -72,7 +74,7 @@ def statement(directory, job, match, fact, office):
     doc.save(word)
     # 每次转换使用独立配置，避免并发时将任务转发到另一个 Writer 进程。
     with tempfile.TemporaryDirectory() as private:
-        args = [office, "-env:UserInstallation=" + Path(private).as_uri(), "--headless",
+        args = [office, "-env:UserInstallation=" + Path(private).resolve().as_uri(), "--headless",
                 "--convert-to", "pdf", "--outdir", str(directory), str(word)]
         result = subprocess.run(args, capture_output=True, timeout=60)
         if result.returncode == 81:  # 部分发行版首次创建配置后要求重启一次
@@ -80,16 +82,18 @@ def statement(directory, job, match, fact, office):
         pdf = word.with_suffix(".pdf")
         if result.returncode or not pdf.is_file():
             raise ValueError("Word 陈述导出失败，请检查 LibreOffice Writer 和字体")
-    info = subprocess.check_output(["pdfinfo", str(pdf)], text=True, env={**os.environ, "LC_ALL": "C"}, timeout=20)
+    info = subprocess.check_output(["pdfinfo", str(pdf)], encoding="utf-8", errors="replace", env={**os.environ, "LC_ALL": "C"}, timeout=20)
     if not re.search(r"(?m)^Pages:\s+1\s*$", info):
         raise ValueError("Personal Statement 超过一页，请缩短引用的 CV 经历后重新生成")
-    content = subprocess.check_output(["pdftotext", str(pdf), "-"], text=True, timeout=20)
+    content = subprocess.check_output(["pdftotext", "-enc", "UTF-8", str(pdf), "-"], encoding="utf-8", timeout=20)
     if closing not in " ".join(content.split()):
         raise ValueError("PDF 末段不完整，请检查字体和页边距")
     return word
 
 
 def prepare_version(output, day, job, match, fact, resume, cv_hash, office, review):
+    if not onsite_eligible(job):
+        raise ValueError("仅为已确认的站内 Quick Apply / Easy Apply 准备申请材料")
     job_id = job.get_platform_data("job_id")
     if not re.fullmatch(r"[0-9]+", job_id) or job.platform not in {"jobsdb", "linkedin"}:
         raise ValueError("无法建立安全且唯一的职位目录")

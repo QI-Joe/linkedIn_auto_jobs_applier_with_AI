@@ -1,5 +1,12 @@
+import hashlib
 from dataclasses import dataclass, field
 from typing import Optional, Dict, Any
+
+def unidentified_card(text: str) -> str:
+    """为缺少平台 ID 的可见卡片保留审阅记录，禁止用于导航或申请。"""
+    normalized = " ".join(text.split())
+    return "unidentified-" + hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
 
 @dataclass
 class Job:

@@ -11,6 +11,10 @@ from selenium.webdriver.support.ui import WebDriverWait
 import src.utils.utils as utils
 from src.base.base_easy_applier import BaseEasyApplier
 from src.jobsdb.scraper import read_detail_fields
+from src.jobsdb.snapshot import read_jobs
+from src.preparation.history import DEFAULT_HISTORY, JobHistory, legacy_job, onsite_eligible
+from lxml import html
+from urllib.parse import urlsplit
 from src.utils.coverLetter import CoverLetterPDF
 import src.utils.strings as strings
 from collections import defaultdict
@@ -39,6 +43,7 @@ class JobsDBEasyApplier(BaseEasyApplier):
         self.base_url = "https://hk.jobsdb.com"
         self.cover_letter_operator = CoverLetterPDF()
         self.logging_system: logBase = logBase(LOG_PATH)
+        self.history = JobHistory(DEFAULT_HISTORY)
         self.logging_system.start()
 
     def get_job_search_url(self):
@@ -197,6 +202,13 @@ class JobsDBEasyApplier(BaseEasyApplier):
         try:
             utils.printyellow(f"JobsDB: Processing job card {job_id}")
             
+            # 先存列表信息；侧栏或后续申请流程失败时仍能从历史库找回。
+            wrapper = html.fragment_fromstring(card.get_attribute("outerHTML"), create_parent="div")
+            article = wrapper.xpath("./article")
+            if article:
+                article[0].set("data-testid", "job-card")
+                article[0].set("data-job-id", job_id)
+                self.history.save(read_jobs(wrapper), "browser-list")
             # Scroll to card
             self.driver.execute_script("arguments[0].scrollIntoView({block:'center'});", card)
             time.sleep(random.uniform(1, 2))
@@ -214,11 +226,18 @@ class JobsDBEasyApplier(BaseEasyApplier):
             # Find apply button
             apply_button = self._find_apply_button_in_sidebar(sidebar)
             
-            button_text = apply_button.text.strip()
+            button_text = apply_button.text.strip() if apply_button else ""
             utils.printyellow(f"JobsDB: Found apply button: {button_text}")
             job_info["apply_button_type"] = button_text
             job_info["platform"] = "JobsDB"
             job_info["applied"], status = False, False
+            record = legacy_job(job_info)
+            if record:
+                record.set_platform_data("apply_url", apply_button.get_attribute("href") if apply_button else "")
+                self.history.save([record], "browser-detail")
+            if not record or not onsite_eligible(self.history.get(record.platform, record.get_platform_data("job_id"))) or not self._confirmed_button(apply_button, job_id):
+                self.logging_system.add_log_job(job_info)
+                return False
             job_info = self.gpt_answerer._decide_apply_strategy(job_info)
             
             if jumped:
@@ -232,6 +251,9 @@ class JobsDBEasyApplier(BaseEasyApplier):
                 if job_info["apply_decision"]:
                     status = self._handle_job_application(apply_button, job_info, [new_windows], job_list_search_archive_windows)
                 job_info["applied"] = status
+                if status:
+                    record.apply_method = "Applied"
+                    self.history.save([record], "jobsdb-application")
 
                 self.logging_system.add_log_job(job_info)
                 return status
@@ -380,14 +402,23 @@ class JobsDBEasyApplier(BaseEasyApplier):
 
     def _should_apply_by_button_text(self, button_text: str) -> bool:
         """Decide whether to apply based on button text"""
-        button_text = button_text.lower().strip()
-        apply_keywords = ['quick apply', 'easy apply']
-        
-        return any(keyword in button_text for keyword in apply_keywords)
+        return button_text.strip().casefold() == "quick apply"
+
+    def _confirmed_button(self, button, job_id):
+        if button is None or not self._should_apply_by_button_text(button.text):
+            return False
+        page = urlsplit(self.driver.current_url)
+        if (page.scheme, page.netloc) != ("https", "hk.jobsdb.com"):
+            return False
+        target = urlsplit(button.get_attribute("href") or "")
+        return (target.scheme == "https" and target.netloc == "hk.jobsdb.com"
+                and target.path.rstrip("/") == f"/job/{job_id}/apply")
 
     def _handle_job_application(self, apply_button: WebElement, job_info: dict, new_windows: list[str], job_list_windows: str) -> bool:
         """Handle job application"""
         try:
+            if not self._confirmed_button(apply_button, job_info["job_id"]):
+                return False
             main_window = job_list_windows
             existing_windows = set(self.driver.window_handles)
             
@@ -402,6 +433,8 @@ class JobsDBEasyApplier(BaseEasyApplier):
                 new_window = list(new_windows)[0]
                 self.driver.switch_to.window(new_window)
             
+            self._application_job_id = job_info["job_id"]
+            self._require_application_page()
             job_info = self.gpt_answerer.job_info_parser(job_info)
             job_info["selected_document"] = DOCUMENT_STYLE[job_info["selected_document_index"]]
             
@@ -409,11 +442,13 @@ class JobsDBEasyApplier(BaseEasyApplier):
             try:
                 time.sleep(2)
                 
+                self._require_application_page()
                 self.document_page_control() # include resume select and cover letter selection
                 
                 time.sleep(random.uniform(1, 3))
                 current_url = self.driver.current_url
                 if re.search(r'role-requirement?', str(current_url)):
+                    self._require_application_page()
                     self.fillin_form()  # include personal information fill-in
                 
                     time.sleep(random.uniform(1, 4))
@@ -457,6 +492,13 @@ class JobsDBEasyApplier(BaseEasyApplier):
         except Exception as e:
             utils.printred(f"JobsDB: Application failed: {str(e)}")
             return False
+
+    def _require_application_page(self):
+        destination = urlsplit(self.driver.current_url)
+        base = f"/job/{self._application_job_id}/apply"
+        if (destination.scheme != "https" or destination.netloc != "hk.jobsdb.com"
+                or not (destination.path == base or destination.path.startswith(base + "/"))):
+            raise ValueError("当前页面不是该职位的 JobsDB 站内申请页")
 
     def document_page_control(self):
         """
@@ -1027,6 +1069,7 @@ class JobsDBEasyApplier(BaseEasyApplier):
         btn: WebDriverWait = wait.until(
             EC.element_to_be_clickable((By.CSS_SELECTOR, f"button[data-testid='{button}']"))
         )
+        self._require_application_page()
         btn.click()
 
     def _discard_application(self) -> None:
